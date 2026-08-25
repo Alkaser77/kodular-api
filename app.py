@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import time
 
 app = Flask(__name__)
-GOOGLE_DRIVE_LINK = "https://drive.google.com/uc?export=download&id=1ABCxyz123"
+GOOGLE_DRIVE_LINK = "https://drive.google.com/uc?export=download&id=1bB0Tkx2Oc5Dc8DBCjHBQryvkUGj3GWKT"
 
 @app.route('/')
 def home():
