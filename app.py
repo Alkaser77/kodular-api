@@ -20,6 +20,19 @@ def get_user(user_id):
 def save_user(user):
     supabase.table("users").upsert(user).execute()
 
+def get_remaining_hours(user):
+    # لو مافيش تايمر بادي معناها ماعنداش وقت
+    if not user.get("last_used"):
+        return user["hours_left"]
+
+    last_used = datetime.strptime(user["last_used"], "%Y-%m-%d %H:%M:%S")
+    now = datetime.now()
+    passed_hours = (now - last_used).total_seconds() / 3600
+
+    # الوقت المتبقي = الوقت الاصلي - الوقت اللي فات
+    remaining = user["hours_left"] - passed_hours
+    return max(0, remaining)
+
 @app.route('/check', methods=['GET'])
 def check():
     user_id = request.args.get('user_id')
@@ -28,81 +41,68 @@ def check():
     now = datetime.now()
     user = get_user(user_id)
 
-    # 1. مستخدم جديد
+    # 1. مستخدم جديد: نعطيه ساعتين ونبدا التايمر
     if not user:
         user = {
             "user_id": user_id,
-            "hours_left": 2.0,
-            "last_check": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "last_used": None,
+            "hours_left": 2.0, # هذا ثابت. وقت التفعيل
+            "last_used": now.strftime("%Y-%m-%d %H:%M:%S"), # بداية العد
             "status": "active"
         }
         save_user(user)
         return jsonify({"status": "active", "link": GOOGLE_DRIVE_LINK, "filename": FILENAME, "hours": 2.0})
 
-    last = datetime.strptime(user["last_check"], "%Y-%m-%d %H:%M:%S")
-    diff_hours = (now - last).total_seconds() / 3600
+    # 2. نحسب الوقت المتبقي توا
+    remaining = get_remaining_hours(user)
 
-    # 2. نقص الوقت بس لو عنده وقت و active
-    if user["status"] == "active" and user["hours_left"] > 0:
-        user["hours_left"] = max(0, user["hours_left"] - diff_hours)
+    # 3. لو الوقت تم
+    if remaining <= 0:
+        user["hours_left"] = 0
+        user["status"] = "expired"
 
-        if user["hours_left"] <= 0:
-            user["hours_left"] = 0
-            user["status"] = "expired"
-
-    user["last_check"] = now.strftime("%Y-%m-%d %H:%M:%S")
-
-    # 3. لو عنده وقت مزال
-    if user["hours_left"] > 0:
-        save_user(user)
-        return jsonify({"status": "active", "link": GOOGLE_DRIVE_LINK, "filename": FILENAME, "hours": round(user["hours_left"], 2)})
-
-    # 4. لو صفر نشوفو الكول داون 24 ساعة
-    if user["last_used"]:
+        # نشوفو فات 24 ساعة ولا لا
         last_used_time = datetime.strptime(user["last_used"], "%Y-%m-%d %H:%M:%S")
         hours_since_last = (now - last_used_time).total_seconds() / 3600
-        if hours_since_last < 24:
+
+        if hours_since_last >= 24:
+            # فات 24: نجدد ساعتين جداد ونبدا عد جديد
+            user["hours_left"] = 2.0
+            user["last_used"] = now.strftime("%Y-%m-%d %H:%M:%S")
+            user["status"] = "active"
             save_user(user)
-            wait = 24 - hours_since_last
-            return jsonify({"status": "cooldown", "message": f"Wait {round(wait,1)} hours", "hours": 0})
+            return jsonify({"status": "active", "link": GOOGLE_DRIVE_LINK, "filename": FILENAME, "hours": 2.0})
+        else:
+            # مزال في الكول داون
+            wait = round(24 - hours_since_last, 1)
+            save_user(user)
+            return jsonify({"status": "cooldown", "message": f"Wait {wait} hours", "hours": 0})
 
-    # 5. كمل 24 ساعة نعطوه 2 ساعات جداد
-    user["hours_left"] = 2.0
-    user["last_used"] = now.strftime("%Y-%m-%d %H:%M:%S")
-    user["status"] = "active"
+    # 4. لو عنده وقت: نحدث hours_left باش ما يقعدش يجمع
+    # بس last_used يقعد ثابت. هكي كل تشيك يعطي رقم اقل
+    user["hours_left"] = remaining
     save_user(user)
-    return jsonify({"status": "active", "link": GOOGLE_DRIVE_LINK, "filename": FILENAME, "hours": 2.0})
 
-@app.route('/addtime', methods=['GET']) # متاع الاعلان
+    return jsonify({"status": "active", "link": GOOGLE_DRIVE_LINK, "filename": FILENAME, "hours": round(remaining, 2)})
+
+@app.route('/addtime', methods=['GET'])
 def add_time():
     user_id = request.args.get('user_id')
     add_hours = float(request.args.get('hours', 2.0))
+    now = datetime.now()
 
     user = get_user(user_id)
     if not user:
-        user = {"user_id": user_id, "hours_left": 0, "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "last_used": None, "status": "expired"}
+        user = {"user_id": user_id, "hours_left": 0, "last_used": None, "status": "expired"}
 
-    user["hours_left"] += add_hours
+    current = get_remaining_hours(user)
+    user["hours_left"] = current + add_hours
     user["status"] = "active"
-    user["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # نبدا تايمر جديد لو كان صفر
+    if not user.get("last_used") or current <= 0:
+        user["last_used"] = now.strftime("%Y-%m-%d %H:%M:%S")
     save_user(user)
 
     return jsonify({"status": "success", "new_hours": round(user['hours_left'], 2)})
-
-@app.route('/admin/add', methods=['GET'])
-def add_hours():
-    user_id = request.args.get('user_id')
-    add_hours = float(request.args.get('hours', 0)) # خليتها float
-    key = request.args.get('key')
-    if key!= ADMIN_KEY: return "Wrong key", 403
-
-    user = get_user(user_id)
-    if not user: return "User not found", 404
-    user["hours_left"] += add_hours
-    user["status"] = "active"
-    save_user(user)
-    return f"Added {add_hours} hours. Total: {round(user['hours_left'],2)}"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
