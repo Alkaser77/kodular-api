@@ -1,12 +1,13 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
 from supabase import create_client, Client
+import os
 
 app = Flask(__name__)
 
-# حط بياناتك هنا
-SUPABASE_URL = "https://hbpsplkvsqjounvzhmde.supabase.co/rest/v1/" # Project URL متاعك
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhicHNwbGt2c3Fqb3VudnpobWRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2Njk5NDgsImV4cCI6MjEwMzI0NTk0OH0.ODG_CzjoYd4BbdDvKS2cionfAbCoZfG0pxAm1MrViEA" # anon key متاعك
+# يقرا من Render Environment Variables
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 GOOGLE_DRIVE_LINK = "https://drive.google.com/uc?export=download&id=1bB0Tkx2Oc5Dc8DBCjHBQryvkUGj3GWKT"
@@ -32,7 +33,7 @@ def check():
 
     last = datetime.strptime(user["last_check"], "%Y-%m-%d %H:%M:%S")
     diff_hours = (now - last).total_seconds() / 3600
-    user["hours_left"] = max(0, user["hours_left"] - diff_hours) # max باش ما ينزلش بالسالب
+    user["hours_left"] = max(0, user["hours_left"] - diff_hours)
     user["last_check"] = now.strftime("%Y-%m-%d %H:%M:%S")
 
     if user["hours_left"] > 0:
@@ -63,4 +64,5 @@ def add_hours():
     save_user(user)
     return f"Added {add_hours} hours. Total: {user['hours_left']}"
 
-if __name__ == '__main__': app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
