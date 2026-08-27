@@ -123,112 +123,84 @@ def add_time():
 @app.route('/admin', methods=['GET'])
 def admin_panel():
     key = request.args.get('key')
-    if key!= ADMIN_KEY:
+    if key != ADMIN_KEY:
         return "كلمة السر غلط", 401
 
-    action = request.args.get('action')
-    user_id = request.args.get('user_id')
-    hours = request.args.get('hours', type=float)
-    search = request.args.get('search')
-    msg = ""
+    # 1. اضافة للكل
+    if request.args.get('action') == 'add_all':
+        hours = float(request.args.get('hours', 2.0))
+        all_users = supabase.table("users").select("*").execute().data
+        now = datetime.now()
+        for u in all_users:
+            current = get_remaining_hours(u)
+            u["total_hours"] = current + hours
+            u["status"] = "active"
+            if not u.get("session_start") or current <= 0:
+                u["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
+            save_user(u)
+        return f"تم اضافة {hours} ساعات لكل المستخدمين. <a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
 
-    # تنفيذ الاوامر
-    if action and user_id:
+    # 2. حذف
+    if request.args.get('action') == 'ban':
+        user_id = request.args.get('user_id')
+        supabase.table("users").delete().eq("user_id", user_id).execute()
+
+    # 3. اضافة لساعة واحدة
+    if request.args.get('action') == 'add':
+        user_id = request.args.get('user_id')
+        hours = float(request.args.get('hours', 2.0))
+        now = datetime.now()
         user = get_user(user_id)
-        if not user and action!= "add":
-            user = {"user_id": user_id, "total_hours": 0, "session_start": None, "status": "expired"}
+        if not user: user = {"user_id": user_id, "total_hours": 0, "session_start": None, "status": "expired"}
+        current = get_remaining_hours(user)
+        user["total_hours"] = current + hours
+        user["status"] = "active"
+        if not user.get("session_start") or current <= 0:
+            user["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        save_user(user)
 
-        if action == "extend": # زيادة
-            current = get_remaining_hours(user)
-            user["total_hours"] = current + hours
-            user["status"] = "active"
-            if current <= 0: user["session_start"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            save_user(user)
-            msg = f"✅ تمت زيادة {hours} ساعات. المتبقي: {round(user['total_hours'],2)}"
-
-        elif action == "reduce": # نقص
-            current = get_remaining_hours(user)
-            user["total_hours"] = max(0, current - hours)
-            if user["total_hours"] <= 0: user["status"] = "expired"
-            save_user(user)
-            msg = f"➖ تم نقص {hours} ساعات. المتبقي: {round(user['total_hours'],2)}"
-
-        elif action == "unlimited": # مفتوح
-            user["total_hours"] = 99999.0
-            user["session_start"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            user["status"] = "active"
-            save_user(user)
-            msg = f"♾️ تم فتح الـ ID مفتوح"
-
-        elif action == "ban": # حذف
-            supabase.table("users").delete().eq("user_id", user_id).execute()
-            msg = f"⛔ تم حذف الـ ID"
-
-    # جلب كل اليوزرات مع البحث
+    # 4. عرض الكل
     query = supabase.table("users").select("*")
+    search = request.args.get('search')
     if search:
         query = query.ilike("user_id", f"%{search}%")
     all_users = query.execute().data
 
-    rows = ""
-    for u in all_users:
-        rem = round(get_remaining_hours(u), 2)
-        if u["total_hours"] > 9999: status = "♾️ مفتوح"
-        elif rem > 0: status = "🟢 شغال"
-        else: status = "🔴 منتهي"
-        # زر النسخ
-        rows += f"""<tr>
-            <td style='word-break:break-all'>{u['user_id']}
-            <button onclick="copyID('{u['user_id']}')" style="padding:3px 6px;font-size:10px;background:#007bff">نسخ</button>
-            </td>
-            <td>{status}</td>
-            <td>{rem}</td>
-        </tr>"""
-
     html = f"""
-    <!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>لوحة الادمن</title>
-    <style>
-        body{{background:#111;color:#eee;font-family:tahoma;padding:15px}}
-        input,select,button{{padding:8px;margin:4px;border-radius:5px;border:1px solid #444;background:#222;color:#eee}}
-        button{{background:#28a745;color:#fff;border:none;cursor:pointer}}
-       .search-btn{{background:#007bff}}
-        table{{width:100%;border-collapse:collapse;margin-top:15px}}
-        td,th{{border:1px solid #444;padding:6px;text-align:center;font-size:12px}}
-    </style>
-    <script>
-        function copyID(id) {{
-            navigator.clipboard.writeText(id);
-            alert('تم نسخ: ' + id);
-        }}
-    </script>
-    </head><body>
     <h2>لوحة تحكم الادمن</h2>
-    <p style="color:lightgreen">{msg}</p>
-
     <form method="get">
         <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input name="search" placeholder="ابحث عن ID" value="{search or ''}">
-        <button class="search-btn" type="submit">بحث</button>
+        <input type="text" name="search" placeholder="بحث بالـ ID">
+        <button type="submit">بحث</button>
         <a href="/admin?key={ADMIN_KEY}"><button type="button">عرض الكل</button></a>
     </form>
+    
     <hr>
+    <form method="get" style="background:#ffe; padding:10px; border:1px solid orange;">
+        <input type="hidden" name="key" value="{ADMIN_KEY}">
+        <input type="hidden" name="action" value="add_all">
+        <b>اضافة ساعات للكل:</b>
+        <input type="number" name="hours" value="2" step="0.5" style="width:80px;">
+        <button type="submit" style="background:orange; color:white;">اضافة للكل</button>
+    </form>
+    <hr>
+    
     <form method="get">
         <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input name="user_id" id="user_id_input" placeholder="ID الجهاز" required>
-        <select name="action">
-            <option value="extend">زيادة ساعات</option>
-            <option value="reduce">نقص ساعات</option>
-            <option value="unlimited">فتح مفتوح</option>
-            <option value="ban">حذف</option>
-        </select>
-        <input name="hours" type="number" step="0.5" placeholder="عدد الساعات" value="24">
-        <button>تنفيذ</button>
+        <input type="text" name="user_id" placeholder="ID الجهاز">
+        <input type="number" name="hours" value="24" step="0.5">
+        <button name="action" value="add">زيادة ساعات</button>
     </form>
-
-    <h3>المستخدمين: {len(all_users)}</h3>
-    <table><tr><th>ID</th><th>الحالة</th><th>المتبقي بالساعات</th></tr>{rows}</table>
-    </body></html>
+    <hr>
+    <table border="1" cellpadding="5">
+        <tr><th>ID</th><th>الساعات</th><th>الحالة</th><th>تحكم</th></tr>
     """
+    for u in all_users:
+        remaining = get_remaining_hours(u)
+        status = "🟢 شغال" if remaining > 0 else "🔴 منتهي"
+        html += f"<tr><td>{u['user_id']}</td><td>{round(remaining,2)}</td><td>{status}</td>"
+        html += f"<td><a href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a></td></tr>"
+    html += "</table>"
     return html
 
 if __name__ == '__main__':
