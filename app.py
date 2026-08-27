@@ -126,6 +126,7 @@ def admin_panel():
     if key != ADMIN_KEY:
         return "<h3 style='color:red; text-align:center;'>كلمة السر غلط</h3>", 401
 
+    msg = ""
     # 1. اضافة للكل
     if request.args.get('action') == 'add_all':
         hours = float(request.args.get('hours', 2.0))
@@ -138,88 +139,52 @@ def admin_panel():
             if not u.get("session_start") or current <= 0:
                 u["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
             save_user(u)
-        return f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات لكل المستخدمين</h3><a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
+        msg = f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات لكل المستخدمين</h3>"
 
-    # 2. حذف
+    # 2. تنقيص للكل - مع تأكيد
+    if request.args.get('action') == 'sub_all':
+        hours = float(request.args.get('hours', 1.0))
+        all_users = supabase.table("users").select("*").execute().data
+        for u in all_users:
+            current = get_remaining_hours(u)
+            u["total_hours"] = max(0, current - hours)
+            if u["total_hours"] <= 0: u["status"] = "expired"
+            save_user(u)
+        msg = f"<h3 style='color:orange; text-align:center;'>تم تنقيص {hours} ساعات من الكل</h3>"
+
+    # 3. حذف - مع تأكيد
     if request.args.get('action') == 'ban':
         user_id = request.args.get('user_id')
         supabase.table("users").delete().eq("user_id", user_id).execute()
-        return f"<h3 style='color:orange; text-align:center;'>تم حذف {user_id}</h3><a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
+        msg = f"<h3 style='color:red; text-align:center;'>تم حذف {user_id}</h3>"
 
-    # 3. اضافة لساعة واحدة
-    if request.args.get('action') == 'add':
+    # 4. اضافة/تنقيص لجهاز واحد
+    if request.args.get('action') in ['add', 'sub']:
         user_id = request.args.get('user_id')
         hours = float(request.args.get('hours', 2.0))
         now = datetime.now()
         user = get_user(user_id)
         if not user: user = {"user_id": user_id, "total_hours": 0, "session_start": None, "status": "expired"}
         current = get_remaining_hours(user)
-        user["total_hours"] = current + hours
-        user["status"] = "active"
-        if not user.get("session_start") or current <= 0:
-            user["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        
+        if request.args.get('action') == 'add':
+            user["total_hours"] = current + hours
+            user["status"] = "active"
+            if not user.get("session_start") or current <= 0:
+                user["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
+            msg = f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات</h3>"
+        else: # تنقيص
+            user["total_hours"] = max(0, current - hours)
+            if user["total_hours"] <= 0: user["status"] = "expired"
+            msg = f"<h3 style='color:orange; text-align:center;'>تم تنقيص {hours} ساعات</h3>"
         save_user(user)
-        return f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات</h3><a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
 
-    # 4. عرض الكل
+    # 5. عرض الكل
     query = supabase.table("users").select("*")
     search = request.args.get('search')
     if search:
         query = query.ilike("user_id", f"%{search}%")
-    all_users = query.execute().data
-
-    html = f"""
-    <style>
-        body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-        .container {{ max-width:900px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
-        h2 {{ text-align:center; color:#333; }}
-        table {{ width:100%; border-collapse: collapse; margin-top:20px; }}
-        th {{ background:#007bff; color:white; padding:10px; }}
-        td {{ padding:10px; text-align:center; border-bottom:1px solid #ddd; }}
-        input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
-        button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
-        button:hover {{ background:#0056b3; }}
-        .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-        .addall button {{ background:#ff8800; }}
-        .del {{ background:red; padding:5px 10px; text-decoration:none; color:white; border-radius:5px; }}
-    </style>
-    <div class="container">
-    <h2>لوحة تحكم الادمن</h2>
-    
-    <form method="get">
-        <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="text" name="search" placeholder="بحث بالـ ID">
-        <button type="submit">بحث</button>
-        <a href="/admin?key={ADMIN_KEY}"><button type="button">عرض الكل</button></a>
-    </form>
-
-    <div class="addall">
-        <form method="get">
-            <input type="hidden" name="key" value="{ADMIN_KEY}">
-            <input type="hidden" name="action" value="add_all">
-            <b>اضافة ساعات لكل المستخدمين:</b>
-            <input type="number" name="hours" value="2" step="0.5" style="width:80px;">
-            <button type="submit">تنفيذ</button>
-        </form>
-    </div>
-    
-    <form method="get">
-        <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="text" name="user_id" placeholder="ID الجهاز" required>
-        <input type="number" name="hours" value="24" step="0.5">
-        <button name="action" value="add">زيادة ساعات لجهاز</button>
-    </form>
-    <hr>
-    <table>
-        <tr><th>ID الجهاز</th><th>الساعات المتبقية</th><th>الحالة</th><th>تحكم</th></tr>
-    """
-    for u in all_users:
-        remaining = get_remaining_hours(u)
-        status = "🟢 شغال" if remaining > 0 else "🔴 منتهي"
-        html += f"<tr><td>{u['user_id']}</td><td>{round(remaining,2)}</td><td>{status}</td>"
-        html += f"<td><a class='del' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a></td></tr>"
-    html += "</table></div>"
-    return html
+    all_users = query.execute
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
