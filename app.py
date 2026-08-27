@@ -124,7 +124,7 @@ def add_time():
 def admin_panel():
     key = request.args.get('key')
     if key != ADMIN_KEY:
-        return "كلمة السر غلط", 401
+        return "<h3 style='color:red; text-align:center;'>كلمة السر غلط</h3>", 401
 
     # 1. اضافة للكل
     if request.args.get('action') == 'add_all':
@@ -138,12 +138,13 @@ def admin_panel():
             if not u.get("session_start") or current <= 0:
                 u["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
             save_user(u)
-        return f"تم اضافة {hours} ساعات لكل المستخدمين. <a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
+        return f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات لكل المستخدمين</h3><a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
 
     # 2. حذف
     if request.args.get('action') == 'ban':
         user_id = request.args.get('user_id')
         supabase.table("users").delete().eq("user_id", user_id).execute()
+        return f"<h3 style='color:orange; text-align:center;'>تم حذف {user_id}</h3><a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
 
     # 3. اضافة لساعة واحدة
     if request.args.get('action') == 'add':
@@ -158,6 +159,7 @@ def admin_panel():
         if not user.get("session_start") or current <= 0:
             user["session_start"] = now.strftime("%Y-%m-%d %H:%M:%S")
         save_user(user)
+        return f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات</h3><a href='/admin?key={ADMIN_KEY}'>رجوع</a>"
 
     # 4. عرض الكل
     query = supabase.table("users").select("*")
@@ -167,40 +169,56 @@ def admin_panel():
     all_users = query.execute().data
 
     html = f"""
+    <style>
+        body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
+        .container {{ max-width:900px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
+        h2 {{ text-align:center; color:#333; }}
+        table {{ width:100%; border-collapse: collapse; margin-top:20px; }}
+        th {{ background:#007bff; color:white; padding:10px; }}
+        td {{ padding:10px; text-align:center; border-bottom:1px solid #ddd; }}
+        input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
+        button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
+        button:hover {{ background:#0056b3; }}
+        .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
+        .addall button {{ background:#ff8800; }}
+        .del {{ background:red; padding:5px 10px; text-decoration:none; color:white; border-radius:5px; }}
+    </style>
+    <div class="container">
     <h2>لوحة تحكم الادمن</h2>
+    
     <form method="get">
         <input type="hidden" name="key" value="{ADMIN_KEY}">
         <input type="text" name="search" placeholder="بحث بالـ ID">
         <button type="submit">بحث</button>
         <a href="/admin?key={ADMIN_KEY}"><button type="button">عرض الكل</button></a>
     </form>
-    
-    <hr>
-    <form method="get" style="background:#ffe; padding:10px; border:1px solid orange;">
-        <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="hidden" name="action" value="add_all">
-        <b>اضافة ساعات للكل:</b>
-        <input type="number" name="hours" value="2" step="0.5" style="width:80px;">
-        <button type="submit" style="background:orange; color:white;">اضافة للكل</button>
-    </form>
-    <hr>
+
+    <div class="addall">
+        <form method="get">
+            <input type="hidden" name="key" value="{ADMIN_KEY}">
+            <input type="hidden" name="action" value="add_all">
+            <b>اضافة ساعات لكل المستخدمين:</b>
+            <input type="number" name="hours" value="2" step="0.5" style="width:80px;">
+            <button type="submit">تنفيذ</button>
+        </form>
+    </div>
     
     <form method="get">
         <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="text" name="user_id" placeholder="ID الجهاز">
+        <input type="text" name="user_id" placeholder="ID الجهاز" required>
         <input type="number" name="hours" value="24" step="0.5">
-        <button name="action" value="add">زيادة ساعات</button>
+        <button name="action" value="add">زيادة ساعات لجهاز</button>
     </form>
     <hr>
-    <table border="1" cellpadding="5">
-        <tr><th>ID</th><th>الساعات</th><th>الحالة</th><th>تحكم</th></tr>
+    <table>
+        <tr><th>ID الجهاز</th><th>الساعات المتبقية</th><th>الحالة</th><th>تحكم</th></tr>
     """
     for u in all_users:
         remaining = get_remaining_hours(u)
         status = "🟢 شغال" if remaining > 0 else "🔴 منتهي"
         html += f"<tr><td>{u['user_id']}</td><td>{round(remaining,2)}</td><td>{status}</td>"
-        html += f"<td><a href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a></td></tr>"
-    html += "</table>"
+        html += f"<td><a class='del' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a></td></tr>"
+    html += "</table></div>"
     return html
 
 if __name__ == '__main__':
