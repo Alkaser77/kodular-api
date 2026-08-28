@@ -120,18 +120,19 @@ def add_time():
     return jsonify({"status": "success", "new_hours": round(user['total_hours'], 2)})
 
 # ================== صفحة الادمن الكاملة ==================
-    @app.route('/admin', methods=['GET'])
+@app.route('/admin', methods=['GET'])
 def admin_panel():
     key = request.args.get('key')
-    if key != ADMIN_KEY:
+    if key!= ADMIN_KEY:
         return "<h3 style='color:red; text-align:center;'>كلمة السر غلط</h3>", 401
 
     msg = ""
+    now = datetime.now()
+
     # 1. اضافة للكل
     if request.args.get('action') == 'add_all':
         hours = float(request.args.get('hours', 2.0))
         all_users = supabase.table("users").select("*").execute().data
-        now = datetime.now()
         for u in all_users:
             current = get_remaining_hours(u)
             u["total_hours"] = current + hours
@@ -141,7 +142,7 @@ def admin_panel():
             save_user(u)
         msg = f"<h3 style='color:green; text-align:center;'>تم اضافة {hours} ساعات لكل المستخدمين</h3>"
 
-    # 2. تنقيص للكل - مع تأكيد
+    # 2. تنقيص للكل
     if request.args.get('action') == 'sub_all':
         hours = float(request.args.get('hours', 1.0))
         all_users = supabase.table("users").select("*").execute().data
@@ -152,7 +153,7 @@ def admin_panel():
             save_user(u)
         msg = f"<h3 style='color:orange; text-align:center;'>تم تنقيص {hours} ساعات من الكل</h3>"
 
-    # 3. حذف - مع تأكيد
+    # 3. حذف
     if request.args.get('action') == 'ban':
         user_id = request.args.get('user_id')
         supabase.table("users").delete().eq("user_id", user_id).execute()
@@ -162,11 +163,10 @@ def admin_panel():
     if request.args.get('action') in ['add', 'sub']:
         user_id = request.args.get('user_id')
         hours = float(request.args.get('hours', 2.0))
-        now = datetime.now()
         user = get_user(user_id)
         if not user: user = {"user_id": user_id, "total_hours": 0, "session_start": None, "status": "expired"}
         current = get_remaining_hours(user)
-        
+
         if request.args.get('action') == 'add':
             user["total_hours"] = current + hours
             user["status"] = "active"
@@ -180,16 +180,17 @@ def admin_panel():
         save_user(user)
 
     # 5. عرض الكل
-    query = supabase.table("users").select("*")
+    query = supabase.table("users").select("*").order("session_start", desc=True)
     search = request.args.get('search')
     if search:
         query = query.ilike("user_id", f"%{search}%")
     all_users = query.execute().data
 
     html = f"""
+    <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>لوحة تحكم الادمن</title>
     <style>
         body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-        .container {{ max-width:950px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
+       .container {{ max-width:950px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
         h2 {{ text-align:center; color:#333; }}
         table {{ width:100%; border-collapse: collapse; margin-top:20px; }}
         th {{ background:#007bff; color:white; padding:10px; }}
@@ -197,30 +198,23 @@ def admin_panel():
         input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
         button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
         button:hover {{ background:#0056b3; }}
-        .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-        .addall button {{ background:#ff8800; }}
-        .suball button {{ background:#dc3545; }}
-        .del {{ background:red; padding:5px 10px; text-decoration:none; color:white; border-radius:5px; }}
-        .copy {{ background:#28a745; padding:3px 8px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; margin-right:5px; }}
+       .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
+       .addall button {{ background:#ff8800; }}
+       .suball button {{ background:#dc3545; }}
+       .del {{ background:red; padding:5px 10px; text-decoration:none; color:white; border-radius:5px; }}
+       .copy {{ background:#28a745; padding:3px 8px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; margin-left:5px; }}
     </style>
-    
     <script>
-        function copyID(id) {{
-            navigator.clipboard.writeText(id);
-            alert('تم نسخ: ' + id);
-        }}
-        function confirmAction(msg) {{
-            return confirm(msg); // تطلع نافذة هل انت متأكد
-        }}
+        function copyID(id) {{ navigator.clipboard.writeText(id); alert('تم نسخ: ' + id); }}
+        function confirmAction(msg) {{ return confirm(msg); }}
     </script>
-
-    <div class="container">
+    </head><body><div class="container">
     <h2>لوحة تحكم الادمن</h2>
     {msg}
-    
+
     <form method="get">
         <input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="text" name="search" placeholder="بحث بالـ ID">
+        <input type="text" name="search" placeholder="بحث بالـ ID" value="{search if search else ''}">
         <button type="submit">بحث</button>
         <a href="/admin?key={ADMIN_KEY}"><button type="button">عرض الكل</button></a>
     </form>
@@ -240,7 +234,7 @@ def admin_panel():
             <button type="submit">- تنقيص</button>
         </form>
     </div>
-    
+
     <form method="get">
         <input type="hidden" name="key" value="{ADMIN_KEY}">
         <input type="text" name="user_id" placeholder="ID الجهاز" required>
@@ -258,8 +252,8 @@ def admin_panel():
         html += f"<tr><td><span class='copy' onclick=\"copyID('{u['user_id']}')\">نسخ</span>{u['user_id']}</td>"
         html += f"<td>{round(remaining,2)}</td><td>{status}</td>"
         html += f"<td><a class='del' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}' onclick=\"return confirmAction('متأكد تبي تحذف {u['user_id']}؟')\">حذف</a></td></tr>"
-    html += "</table></div>"
+    html += "</table></div></body></html>"
     return html
-    
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
