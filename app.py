@@ -68,6 +68,8 @@ def check():
 @app.route('/download/<filename>')
 def download(filename):
     user_id = request.args.get('user_id')
+    if not user_id: return "user_id missing", 400
+    
     user = get_user(user_id)
     remaining = get_remaining_hours(user)
     if remaining <= 0: return "Time expired", 403
@@ -75,7 +77,17 @@ def download(filename):
 
     file_path = os.path.join(FOLDER, filename)
     if not os.path.exists(file_path): return f"File {filename} not found", 404
-    return send_from_directory(FOLDER, filename, as_attachment=True, download_name=filename)
+    
+    # الحل: نقرو الملف ونبعثوه يدوي
+    with open(file_path, 'rb') as f:
+        data = f.read()
+    
+    from flask import Response
+    return Response(
+        data,
+        mimetype='application/octet-stream',
+        headers={"Content-Disposition": f"attachment;filename={filename}"}
+    )
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
