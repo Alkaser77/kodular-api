@@ -12,6 +12,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = 'files'
 ADMIN_KEY = "admin123"
 
+FILES = ["File.npvt", "File.ssc", "File.nm"]
+
 def get_user(user_id):
     res = supabase.table("users").select("*").eq("user_id", user_id).execute()
     return res.data[0] if res.data else None
