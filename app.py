@@ -48,6 +48,10 @@ def get_days_hours_from_args():
     hours = float(request.args.get('hours', 0) or 0)
     return days * 24 + hours
 
+@app.route('/')
+def home():
+    return "OK", 200
+    
 @app.route('/check', methods=['GET'])
 def check():
     user_id = request.args.get('user_id')
