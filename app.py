@@ -52,25 +52,20 @@ def get_days_hours_from_args():
 def check():
     user_id = request.args.get('user_id')
     if not user_id: return jsonify({"error": "user_id missing"}), 400
-
     now = datetime.now()
     user = get_user(user_id)
     base_url = request.host_url
     links = [f"{base_url}download/{f}?user_id={user_id}" for f in FILES]
-
     if not user:
         expires = now + timedelta(hours=2)
         user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active"}
         save_user(user)
         return jsonify({"status": "active", "links": links, "files": FILES, "hours": "2:00", "hours_float": 2.0})
-
     remaining = get_remaining_hours(user)
-
     if remaining <= 0:
         user["status"] = "expired"
         last_expire = datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
         hours_since_expire = (now - last_expire).total_seconds() / 3600
-
         if hours_since_expire >= 24:
             new_expire = now + timedelta(hours=2)
             user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
@@ -81,42 +76,30 @@ def check():
             wait = round(24 - hours_since_expire, 1)
             save_user(user)
             return jsonify({"status": "cooldown", "message": f"Wait {wait} hours", "hours": "0:00", "hours_float": 0})
-
     return jsonify({"status": "active", "links": links, "files": FILES, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
 
 @app.route('/download/<filename>')
 def download(filename):
     user_id = request.args.get('user_id')
     if not user_id: return "user_id missing", 400
-
     user = get_user(user_id)
     remaining = get_remaining_hours(user)
     if remaining <= 0: return "Time expired", 403
     if filename not in FILES: return f"File {filename} not allowed", 403
-
     if filename == "File.npvt":
         gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
         try:
             r = requests.get(gdrive_url, stream=True, timeout=30)
             if r.status_code!= 200:
                 return f"Drive error {r.status_code}", 500
-            return Response(
-                r.iter_content(chunk_size=8192),
-                mimetype='application/octet-stream',
-                headers={"Content-Disposition": f"attachment;filename={filename}"}
-            )
+            return Response(r.iter_content(chunk_size=8192), mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
         except Exception as e:
             return f"Drive fetch failed: {str(e)}", 500
-
     file_path = os.path.join(FOLDER, filename)
     if not os.path.exists(file_path): return f"File {filename} not found", 404
     with open(file_path, 'rb') as f:
         data = f.read()
-    return Response(
-        data,
-        mimetype='application/octet-stream',
-        headers={"Content-Disposition": f"attachment;filename={filename}"}
-    )
+    return Response(data, mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
@@ -125,7 +108,6 @@ def admin_panel():
     msg = ""
     now = datetime.now()
     if request.args.get('msg') == 'done': msg = "<h3 style='color:blue; text-align:center;'>تمت العملية بنجاح</h3>"
-
     if request.args.get('action') == 'add_all':
         total_hours = get_days_hours_from_args()
         all_users = supabase.table("users").select("*").execute().data
@@ -138,7 +120,6 @@ def admin_panel():
             u["status"] = "active"
             save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
     if request.args.get('action') == 'sub_all':
         total_hours = get_days_hours_from_args()
         all_users = supabase.table("users").select("*").execute().data
@@ -152,12 +133,10 @@ def admin_panel():
                 if new_expire <= now: u["status"] = "expired"
                 save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
     if request.args.get('action') == 'ban':
         user_id = request.args.get('user_id')
         supabase.table("users").delete().eq("user_id", user_id).execute()
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
     if request.args.get('action') == 'reset':
         user_id = request.args.get('user_id')
         new_expire = now + timedelta(hours=2)
@@ -167,7 +146,6 @@ def admin_panel():
             user["status"] = "active"
             save_user(user)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
     if request.args.get('action') in ['add', 'sub']:
         user_id = request.args.get('user_id')
         total_hours = get_days_hours_from_args()
@@ -189,17 +167,15 @@ def admin_panel():
             user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
         save_user(user)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
     query = supabase.table("users").select("*").order("expires_at", desc=True)
     search = request.args.get('search')
     if search: query = query.ilike("user_id", f"%{search}%")
     all_users = query.execute().data
-
     html = f"""
     <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>لوحة تحكم الادمن</title>
     <style>
         body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-    .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
+       .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
         h2 {{ text-align:center; color:#333; }}
         table {{ width:100%; border-collapse: collapse; margin-top:20px; table-layout: fixed; }}
         th {{ background:#007bff; color:white; padding:10px; }}
@@ -207,13 +183,13 @@ def admin_panel():
         input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
         button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
         button:hover {{ background:#0056b3; }}
-    .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-    .addall button {{ background:#ff8800; }}
-    .suball button {{ background:#dc3545; }}
-    .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
-    .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
-    .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
-    .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
+       .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
+       .addall button {{ background:#ff8800; }}
+       .suball button {{ background:#dc3545; }}
+       .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
+       .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
+       .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
+       .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
     </style>
     <script>
         function copyID(id) {{ navigator.clipboard.writeText(id); alert('تم نسخ: ' + id); }}
@@ -235,8 +211,8 @@ def admin_panel():
         remaining_str = format_hm(remaining)
         status = "🟢 شغال" if remaining > 0 else "🔴 منتهي"
         html += f"<tr>"
-        html += f"<td style='font-family: monospace;'>{u['user_id']}</td>"
-        html += f"<td style='font-weight:bold;'>{remaining_str}</td>"
+        html += f"<td dir='ltr' style='font-family: monospace;'>{u['user_id']}</td>"
+        html += f"<td dir='ltr' style='font-weight:bold;'>{remaining_str}</td>"
         html += f"<td>{status}</td>"
         html += f"<td><div class='actions'>"
         html += f"<span class='copy' onclick=\"copyID('{u['user_id']}')\">نسخ</span>"
