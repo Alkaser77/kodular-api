@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask import Flask, request, jsonify, send_from_directory, redirect, Response
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 import os
+import requests
 
 app = Flask(__name__)
 
@@ -11,6 +12,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 FOLDER = 'files'
 ADMIN_KEY = "admin123"
+
+# اي دي ملف الـ npvt من قوقل درايف
+DRIVE_NPVT_ID = os.environ.get('DRIVE_NPVT_ID', '1T8zHaaiCEf-Zkgxpz-ig5Q8_5hScsq1I')
 
 FILES = ["File.npvt", "File.ssc", "File.nm"]
 
@@ -69,20 +73,35 @@ def check():
 def download(filename):
     user_id = request.args.get('user_id')
     if not user_id: return "user_id missing", 400
-    
+
     user = get_user(user_id)
     remaining = get_remaining_hours(user)
     if remaining <= 0: return "Time expired", 403
     if filename not in FILES: return f"File {filename} not allowed", 403
 
+    # لو الملف npvt جيبه من قوقل درايف
+    if filename == "File.npvt":
+        gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
+        try:
+            r = requests.get(gdrive_url, stream=True, timeout=30)
+            if r.status_code!= 200:
+                return f"Drive error {r.status_code}", 500
+
+            return Response(
+                r.iter_content(chunk_size=8192),
+                mimetype='application/octet-stream',
+                headers={"Content-Disposition": f"attachment;filename={filename}"}
+            )
+        except Exception as e:
+            return f"Drive fetch failed: {str(e)}", 500
+
+    # الباقي من مجلد الريندر زي قبل
     file_path = os.path.join(FOLDER, filename)
     if not os.path.exists(file_path): return f"File {filename} not found", 404
-    
-    # الحل: نقرو الملف ونبعثوه يدوي
+
     with open(file_path, 'rb') as f:
         data = f.read()
-    
-    from flask import Response
+
     return Response(
         data,
         mimetype='application/octet-stream',
@@ -170,7 +189,7 @@ def admin_panel():
     <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>لوحة تحكم الادمن</title>
     <style>
         body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-       .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
+      .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
         h2 {{ text-align:center; color:#333; }}
         table {{ width:100%; border-collapse: collapse; margin-top:20px; table-layout: fixed; }}
         th {{ background:#007bff; color:white; padding:10px; }}
@@ -178,13 +197,13 @@ def admin_panel():
         input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
         button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
         button:hover {{ background:#0056b3; }}
-       .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-       .addall button {{ background:#ff8800; }}
-       .suball button {{ background:#dc3545; }}
-       .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
-       .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
-       .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
-       .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
+      .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
+      .addall button {{ background:#ff8800; }}
+      .suball button {{ background:#dc3545; }}
+      .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
+      .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
+      .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
+      .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
     </style>
     <script>
         function copyID(id) {{ navigator.clipboard.writeText(id); alert('تم نسخ: ' + id); }}
