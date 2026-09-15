@@ -13,7 +13,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = 'files'
 ADMIN_KEY = "admin123"
 
-# اي دي ملف الـ npvt من قوقل درايف
 DRIVE_NPVT_ID = os.environ.get('DRIVE_NPVT_ID', '1T8zHaaiCEf-Zkgxpz-ig5Q8_5hScsq1I')
 
 FILES = ["File.npvt", "File.ssc", "File.nm"]
@@ -43,6 +42,11 @@ def format_hm(hours_float):
         day_word = "day" if d == 1 else "days"
         return f"{d} {day_word} {rh}:{m:02d}"
     return f"{h}:{m:02d}"
+
+def get_days_hours_from_args():
+    days = float(request.args.get('days', 0) or 0)
+    hours = float(request.args.get('hours', 0) or 0)
+    return days * 24 + hours
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -90,14 +94,12 @@ def download(filename):
     if remaining <= 0: return "Time expired", 403
     if filename not in FILES: return f"File {filename} not allowed", 403
 
-    # لو الملف npvt جيبه من قوقل درايف
     if filename == "File.npvt":
         gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
         try:
             r = requests.get(gdrive_url, stream=True, timeout=30)
             if r.status_code!= 200:
                 return f"Drive error {r.status_code}", 500
-
             return Response(
                 r.iter_content(chunk_size=8192),
                 mimetype='application/octet-stream',
@@ -106,13 +108,10 @@ def download(filename):
         except Exception as e:
             return f"Drive fetch failed: {str(e)}", 500
 
-    # الباقي من مجلد الريندر زي قبل
     file_path = os.path.join(FOLDER, filename)
     if not os.path.exists(file_path): return f"File {filename} not found", 404
-
     with open(file_path, 'rb') as f:
         data = f.read()
-
     return Response(
         data,
         mimetype='application/octet-stream',
@@ -128,26 +127,26 @@ def admin_panel():
     if request.args.get('msg') == 'done': msg = "<h3 style='color:blue; text-align:center;'>تمت العملية بنجاح</h3>"
 
     if request.args.get('action') == 'add_all':
-        hours = float(request.args.get('hours', 2.0))
+        total_hours = get_days_hours_from_args()
         all_users = supabase.table("users").select("*").execute().data
         for u in all_users:
             current_expire_str = u.get("expires_at")
             current_expire = datetime.strptime(current_expire_str, "%Y-%m-%d %H:%M:%S") if current_expire_str else now
             base_time = max(now, current_expire)
-            new_expire = base_time + timedelta(hours=hours)
+            new_expire = base_time + timedelta(hours=total_hours)
             u["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
             u["status"] = "active"
             save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
 
     if request.args.get('action') == 'sub_all':
-        hours = float(request.args.get('hours', 1.0))
+        total_hours = get_days_hours_from_args()
         all_users = supabase.table("users").select("*").execute().data
         for u in all_users:
             current_expire_str = u.get("expires_at")
             if current_expire_str:
                 current_expire = datetime.strptime(current_expire_str, "%Y-%m-%d %H:%M:%S")
-                new_expire = current_expire - timedelta(hours=hours)
+                new_expire = current_expire - timedelta(hours=total_hours)
                 if new_expire < now: new_expire = now
                 u["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
                 if new_expire <= now: u["status"] = "expired"
@@ -171,20 +170,20 @@ def admin_panel():
 
     if request.args.get('action') in ['add', 'sub']:
         user_id = request.args.get('user_id')
-        hours = float(request.args.get('hours', 2.0))
+        total_hours = get_days_hours_from_args()
         user = get_user(user_id)
         if not user:
-            new_expire = now + timedelta(hours=hours)
+            new_expire = now + timedelta(hours=total_hours)
             user = {"user_id": user_id, "expires_at": new_expire.strftime("%Y-%m-%d %H:%M:%S"), "status": "active"}
         else:
             current_expire_str = user.get("expires_at")
             current_expire = datetime.strptime(current_expire_str, "%Y-%m-%d %H:%M:%S") if current_expire_str else now
             base_time = max(now, current_expire)
             if request.args.get('action') == 'add':
-                new_expire = base_time + timedelta(hours=hours)
+                new_expire = base_time + timedelta(hours=total_hours)
                 user["status"] = "active"
             else:
-                new_expire = current_expire - timedelta(hours=hours)
+                new_expire = current_expire - timedelta(hours=total_hours)
                 if new_expire < now: new_expire = now
                 if new_expire <= now: user["status"] = "expired"
             user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
@@ -200,7 +199,7 @@ def admin_panel():
     <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>لوحة تحكم الادمن</title>
     <style>
         body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-     .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
+    .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
         h2 {{ text-align:center; color:#333; }}
         table {{ width:100%; border-collapse: collapse; margin-top:20px; table-layout: fixed; }}
         th {{ background:#007bff; color:white; padding:10px; }}
@@ -208,13 +207,13 @@ def admin_panel():
         input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
         button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
         button:hover {{ background:#0056b3; }}
-     .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-     .addall button {{ background:#ff8800; }}
-     .suball button {{ background:#dc3545; }}
-     .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
-     .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
-     .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
-     .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
+    .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
+    .addall button {{ background:#ff8800; }}
+    .suball button {{ background:#dc3545; }}
+    .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
+    .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
+    .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
+    .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
     </style>
     <script>
         function copyID(id) {{ navigator.clipboard.writeText(id); alert('تم نسخ: ' + id); }}
@@ -225,10 +224,10 @@ def admin_panel():
     {msg}
     <form method="get"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="text" name="search" placeholder="بحث بالـ ID" value="{search if search else ''}"><button type="submit">بحث</button><a href="/admin?key={ADMIN_KEY}"><button type="button">عرض الكل</button></a></form>
     <div class="addall">
-        <form method="get" style="display:inline-block;" onsubmit="return confirmAction('متأكد تبي تضيف ساعات لكل المستخدمين؟')"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="hidden" name="action" value="add_all"><b>للكل:</b><input type="number" name="hours" value="2" step="0.5" style="width:80px;"><button type="submit">+ اضافة</button></form>
-        <form method="get" style="display:inline-block;" class="suball" onsubmit="return confirmAction('تحذير: متأكد تبي تنقص ساعات من الكل؟')"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="hidden" name="action" value="sub_all"><input type="number" name="hours" value="1" step="0.5" style="width:80px;"><button type="submit">- تنقيص</button></form>
+        <form method="get" style="display:inline-block;" onsubmit="return confirmAction('متأكد تبي تضيف للكل؟')"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="hidden" name="action" value="add_all"><b>للكل:</b><input type="number" name="days" value="0" min="0" style="width:70px;" placeholder="أيام"><input type="number" name="hours" value="2" step="0.5" style="width:70px;" placeholder="ساعات"><button type="submit">+ اضافة</button></form>
+        <form method="get" style="display:inline-block;" class="suball" onsubmit="return confirmAction('تحذير: متأكد تبي تنقص من الكل؟')"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="hidden" name="action" value="sub_all"><input type="number" name="days" value="0" min="0" style="width:70px;" placeholder="أيام"><input type="number" name="hours" value="1" step="0.5" style="width:70px;" placeholder="ساعات"><button type="submit">- تنقيص</button></form>
     </div>
-    <form method="get"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="text" name="user_id" placeholder="ID الجهاز" required><input type="number" name="hours" value="24" step="0.5"><button name="action" value="add">+ زيادة</button><button name="action" value="sub" class="suball">- تنقيص</button></form><hr>
+    <form method="get"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="text" name="user_id" placeholder="ID الجهاز" required><input type="number" name="days" value="0" min="0" placeholder="أيام" style="width:70px;"><input type="number" name="hours" value="24" step="0.5" placeholder="ساعات" style="width:70px;"><button name="action" value="add">+ زيادة</button><button name="action" value="sub" class="suball">- تنقيص</button></form><hr>
     <table><tr><th style="width:35%">ID الجهاز</th><th style="width:20%">الوقت المتبقي</th><th style="width:15%">الحالة</th><th style="width:30%">تحكم</th></tr>
     """
     for u in all_users:
