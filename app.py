@@ -41,8 +41,8 @@ def format_hm(hours_float):
         d = h // 24
         rh = h % 24
         day_word = "day" if d == 1 else "days"
-        return f"{d} {day_word} {rh}:{m:02d} hours"
-    return f"{h}:{m:02d} hours"
+        return f"{d} {day_word} {rh}:{m:02d}"
+    return f"{h}:{m:02d}"
 
 @app.route('/check', methods=['GET'])
 def check():
