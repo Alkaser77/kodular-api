@@ -76,12 +76,16 @@ def check():
             user["status"] = "active"
             save_user(user)
             return jsonify({"status": "active", "links": links, "files": FILES, "hours": "2:00", "hours_float": 2.0})
-        else:
-            wait = round(24 - hours_since_expire, 1)
+                else:
+            remaining_cooldown = 24 - hours_since_expire
+            wait_formatted = format_hm(remaining_cooldown)
             save_user(user)
-            return jsonify({"status": "cooldown", "message": f"Wait {wait} hours", "hours": "0:00", "hours_float": 0})
-    return jsonify({"status": "active", "links": links, "files": FILES, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
-
+            return jsonify({
+                "status": "cooldown", 
+                "message": f"Wait {wait_formatted} hours", 
+                "hours": wait_formatted, 
+                "hours_float": round(remaining_cooldown, 2)
+            })
 @app.route('/download/<filename>')
 def download(filename):
     user_id = request.args.get('user_id')
