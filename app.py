@@ -51,7 +51,7 @@ def get_days_hours_from_args():
 @app.route('/')
 def home():
     return "OK", 200
-    
+
 @app.route('/check', methods=['GET'])
 def check():
     user_id = request.args.get('user_id')
@@ -76,16 +76,13 @@ def check():
             user["status"] = "active"
             save_user(user)
             return jsonify({"status": "active", "links": links, "files": FILES, "hours": "2:00", "hours_float": 2.0})
-                else:
+        else:
             remaining_cooldown = 24 - hours_since_expire
             wait_formatted = format_hm(remaining_cooldown)
             save_user(user)
-            return jsonify({
-                "status": "cooldown", 
-                "message": f"Wait {wait_formatted} hours", 
-                "hours": wait_formatted, 
-                "hours_float": round(remaining_cooldown, 2)
-            })
+            return jsonify({"status": "cooldown", "message": f"Wait {wait_formatted} hours", "hours": wait_formatted, "hours_float": round(remaining_cooldown, 2)})
+    return jsonify({"status": "active", "links": links, "files": FILES, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
+
 @app.route('/download/<filename>')
 def download(filename):
     user_id = request.args.get('user_id')
@@ -183,7 +180,7 @@ def admin_panel():
     <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>لوحة تحكم الادمن</title>
     <style>
         body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-       .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
+      .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
         h2 {{ text-align:center; color:#333; }}
         table {{ width:100%; border-collapse: collapse; margin-top:20px; table-layout: fixed; }}
         th {{ background:#007bff; color:white; padding:10px; }}
@@ -191,13 +188,13 @@ def admin_panel():
         input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
         button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
         button:hover {{ background:#0056b3; }}
-       .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-       .addall button {{ background:#ff8800; }}
-       .suball button {{ background:#dc3545; }}
-       .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
-       .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
-       .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
-       .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
+      .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
+      .addall button {{ background:#ff8800; }}
+      .suball button {{ background:#dc3545; }}
+      .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
+      .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
+      .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
+      .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
     </style>
     <script>
         function copyID(id) {{ navigator.clipboard.writeText(id); alert('تم نسخ: ' + id); }}
