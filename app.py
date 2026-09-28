@@ -1,8 +1,7 @@
-from flask import Flask, request, jsonify, send_from_directory, redirect, Response
+from flask import Flask, request, jsonify, redirect, Response
 from datetime import datetime, timedelta
 from supabase import create_client, Client
-import os
-import requests
+import os, requests, json
 
 app = Flask(__name__)
 
@@ -12,9 +11,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 FOLDER = 'files'
 ADMIN_KEY = "admin123"
-
 DRIVE_NPVT_ID = os.environ.get('DRIVE_NPVT_ID', '1T8zHaaiCEf-Zkgxpz-ig5Q8_5hScsq1I')
-
 FILES = ["File.npvt", "File.ssc", "File.nm"]
 
 def get_user(user_id):
@@ -25,46 +22,85 @@ def save_user(user):
     supabase.table("users").upsert(user).execute()
 
 def get_remaining_hours(user):
-    if not user or not user.get("expires_at"):
-        return 0
+    if not user or not user.get("expires_at"): return 0
     expires = datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
-    now = datetime.now()
-    remaining = (expires - now).total_seconds() / 3600
-    return max(0, remaining)
+    return max(0, (expires - datetime.now()).total_seconds() / 3600)
 
 def format_hm(hours_float):
     total_minutes = int(round(hours_float * 60))
-    h = total_minutes // 60
-    m = total_minutes % 60
+    h = total_minutes // 60; m = total_minutes % 60
     if h >= 24:
-        d = h // 24
-        rh = h % 24
-        day_word = "day" if d == 1 else "days"
-        return f"{d} {day_word} {rh}:{m:02d}"
+        d = h // 24; rh = h % 24
+        return f"{d} day{'s' if d>1 else ''} {rh}:{m:02d}"
     return f"{h}:{m:02d}"
+
+def get_allowed_files(user):
+    if not user or not user.get("allowed_files"): return FILES
+    allowed = user.get("allowed_files")
+    if isinstance(allowed, str):
+        try: allowed = json.loads(allowed)
+        except: allowed = [x.strip() for x in allowed.split(",") if x.strip()]
+    return [f for f in allowed if f in FILES]
 
 def get_days_hours_from_args():
     days = float(request.args.get('days', 0) or 0)
     hours = float(request.args.get('hours', 0) or 0)
     return days * 24 + hours
 
+# =========== 0- الصفحة الرئيسية - تشيك اوتوماتيك زي كودولار ===========
 @app.route('/')
 def home():
-    return "OK", 200
+    return """
+    <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>جاري التحميل...</title>
+    <style>body{font-family:Tahoma;background:#f4f4f4;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+   .box{background:white;padding:30px;border-radius:15px;box-shadow:0 5px 20px #0002;text-align:center;width:90%;max-width:400px}
+   .loader{border:4px solid #f3f3f3;border-top:4px solid #007bff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:15px auto}
+    @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+    </style>
+    <script>
+    async function start(){
+        let uid = localStorage.getItem('my_user_id');
+        if(!uid){
+            uid = 'WEB-' + Math.random().toString(36).substr(2,9).toUpperCase() + Date.now().toString().slice(-5);
+            localStorage.setItem('my_user_id', uid);
+        }
+        document.getElementById('uid').innerText = uid;
+        try{
+            let res = await fetch('/check?user_id=' + uid);
+            let data = await res.json();
+            if(data.status === 'cooldown'){
+                document.getElementById('box').innerHTML = '<h2 style=color:#dc3545>⏳ انتهى وقتك</h2><p>ارجع بعد: <b dir=ltr>'+data.hours+'</b></p><p><code>'+uid+'</code></p>';
+                return;
+            }
+        }catch(e){ console.log(e); }
+        window.location.href = '/user/' + uid;
+    }
+    window.onload = start;
+    </script>
+    </head><body><div class="box" id="box">
+    <div class="loader"></div>
+    <h3>لحظة جاري تجهيز صفحتك...</h3>
+    <p style="color:#999;font-size:11px;"><code id="uid"></code></p>
+    </div></body></html>
+    """
 
+# =========== 1- كودولار - JSON ===========
 @app.route('/check', methods=['GET'])
 def check():
     user_id = request.args.get('user_id')
     if not user_id: return jsonify({"error": "user_id missing"}), 400
     now = datetime.now()
     user = get_user(user_id)
+    allowed = get_allowed_files(user) if user else FILES
     base_url = request.host_url
-    links = [f"{base_url}download/{f}?user_id={user_id}" for f in FILES]
+    links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
+
     if not user:
         expires = now + timedelta(hours=2)
-        user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active"}
+        user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
         save_user(user)
-        return jsonify({"status": "active", "links": links, "files": FILES, "hours": "2:00", "hours_float": 2.0})
+        return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
+
     remaining = get_remaining_hours(user)
     if remaining <= 0:
         user["status"] = "expired"
@@ -72,158 +108,124 @@ def check():
         hours_since_expire = (now - last_expire).total_seconds() / 3600
         if hours_since_expire >= 24:
             new_expire = now + timedelta(hours=2)
-            user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
-            user["status"] = "active"
-            save_user(user)
-            return jsonify({"status": "active", "links": links, "files": FILES, "hours": "2:00", "hours_float": 2.0})
+            user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S"); user["status"] = "active"; save_user(user)
+            return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
         else:
             remaining_cooldown = 24 - hours_since_expire
-            wait_formatted = format_hm(remaining_cooldown)
             save_user(user)
-            return jsonify({"status": "cooldown", "message": f"Wait {wait_formatted} hours", "hours": wait_formatted, "hours_float": round(remaining_cooldown, 2)})
-    return jsonify({"status": "active", "links": links, "files": FILES, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
+            return jsonify({"status": "cooldown", "message": f"Wait {format_hm(remaining_cooldown)} hours", "hours": format_hm(remaining_cooldown), "hours_float": round(remaining_cooldown, 2)})
+
+    return jsonify({"status": "active", "links": links, "files": allowed, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
 
 @app.route('/download/<filename>')
 def download(filename):
     user_id = request.args.get('user_id')
     if not user_id: return "user_id missing", 400
     user = get_user(user_id)
-    remaining = get_remaining_hours(user)
-    if remaining <= 0: return "Time expired", 403
-    if filename not in FILES: return f"File {filename} not allowed", 403
+    if not user: return "user not found", 403
+    if not user.get("page_enabled", True): return "صفحتك موقوفة من الادمن", 403
+    if not user.get("can_download", True): return "التحميل موقف من الادمن", 403
+    if get_remaining_hours(user) <= 0: return "Time expired", 403
+    if filename not in FILES: return "not allowed", 403
+    if filename not in get_allowed_files(user): return "هذا الملف مسكر عليك", 403
+
     if filename == "File.npvt":
         gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
         try:
             r = requests.get(gdrive_url, stream=True, timeout=30)
-            if r.status_code!= 200:
-                return f"Drive error {r.status_code}", 500
+            if r.status_code!= 200: return f"Drive error {r.status_code}", 500
             return Response(r.iter_content(chunk_size=8192), mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
-        except Exception as e:
-            return f"Drive fetch failed: {str(e)}", 500
+        except Exception as e: return f"Drive fetch failed: {str(e)}", 500
+
     file_path = os.path.join(FOLDER, filename)
     if not os.path.exists(file_path): return f"File {filename} not found", 404
-    with open(file_path, 'rb') as f:
-        data = f.read()
+    with open(file_path, 'rb') as f: data = f.read()
     return Response(data, mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
 
+# =========== 2- صفحة المستخدم HTML ===========
+@app.route('/user/<user_id>')
+def user_page(user_id):
+    user = get_user(user_id)
+    if not user: return "<h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود - افتح الصفحة الرئيسية</h2>",404
+    if not user.get("page_enabled", True): return "<h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2>",403
+
+    rem = get_remaining_hours(user)
+    if rem <= 0: return f"<html dir='rtl'><head><meta charset='UTF-8'></head><body style='font-family:Tahoma;text-align:center;padding-top:100px;'><h2>⏳ انتهى اشتراكك</h2><h1 style='color:#dc3545;' dir='ltr'>{format_hm(rem)}</h1><p><code>{user_id}</code></p><a href='/'>حاول بعد 24 ساعة</a></body></html>"
+
+    allowed = get_allowed_files(user)
+    can_dl = user.get("can_download", True)
+    cards = ""
+    for f in allowed:
+        dl = f"{request.host_url}download/{f}?user_id={user_id}"
+        btn = f"<a href='{dl}' style='background:#28a745;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>" if can_dl else "<span style='background:#ccc;color:#666;padding:12px 20px;border-radius:8px;display:block;'>التحميل موقف</span>"
+        cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;box-shadow:0 2px 8px #0001;'><div style='font-size:30px;'>📦</div><h4 style='margin:10px 0;'>{f}</h4>{btn}</div>"
+
+    if not cards: cards = "<p style='grid-column:1/-1;background:white;padding:25px;border-radius:12px;text-align:center;color:gray;'>الادمن ما عطاكش صلاحية لأي ملف حاليا</p>"
+
+    return f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title>
+    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0}}.container{{max-width:800px;margin:auto}}.header{{background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:25px;border-radius:15px;text-align:center}}.time-box{{background:white;padding:15px;border-radius:12px;margin:20px 0;display:flex;justify-content:space-around;text-align:center;box-shadow:0 2px 10px #0001}}.time-box b{{font-size:20px;color:#007bff;display:block}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px}}</style>
+    </head><body><div class="container"><div class="header"><h2>مرحبا 👋</h2><p>صفحتك الخاصة للتحميل</p><small><code>{user_id}</code></small></div>
+    <div class="time-box"><div><small>الوقت المتبقي</small><b dir="ltr">{format_hm(rem)}</b></div><div><small>الملفات</small><b>{len(allowed)}/{len(FILES)}</b></div><div><small>التحميل</small><b>{'مسموح' if can_dl else 'ممنوع'}</b></div></div>
+    <div class="grid">{cards}</div><p style='text-align:center;margin-top:25px;'><a href='/' style='color:#666;font-size:12px;'>الصفحة الرئيسية</a></p></div></body></html>"""
+
+# =========== 3- لوحة الادمن ===========
 @app.route('/admin', methods=['GET'])
 def admin_panel():
     key = request.args.get('key')
-    if key!= ADMIN_KEY: return "<h3 style='color:red; text-align:center;'>كلمة السر غلط</h3>", 401
-    msg = ""
+    if key!= ADMIN_KEY: return "<h3 style='color:red;text-align:center;'>كلمة السر غلط?key=admin123</h3>", 401
     now = datetime.now()
-    if request.args.get('msg') == 'done': msg = "<h3 style='color:blue; text-align:center;'>تمت العملية بنجاح</h3>"
-    if request.args.get('action') == 'add_all':
-        total_hours = get_days_hours_from_args()
-        all_users = supabase.table("users").select("*").execute().data
-        for u in all_users:
-            current_expire_str = u.get("expires_at")
-            current_expire = datetime.strptime(current_expire_str, "%Y-%m-%d %H:%M:%S") if current_expire_str else now
-            base_time = max(now, current_expire)
-            new_expire = base_time + timedelta(hours=total_hours)
-            u["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
-            u["status"] = "active"
-            save_user(u)
+    msg = "<h3 style='color:blue;text-align:center;'>✅ تمت العملية</h3>" if request.args.get('msg')=='done' else ""
+    action = request.args.get('action'); uid = request.args.get('user_id')
+
+    if action == 'set_perm' and uid:
+        files = [f for f in request.args.get('files','').split(',') if f in FILES]
+        u = get_user(uid)
+        if u: u["allowed_files"]=files; save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if request.args.get('action') == 'sub_all':
-        total_hours = get_days_hours_from_args()
-        all_users = supabase.table("users").select("*").execute().data
-        for u in all_users:
-            current_expire_str = u.get("expires_at")
-            if current_expire_str:
-                current_expire = datetime.strptime(current_expire_str, "%Y-%m-%d %H:%M:%S")
-                new_expire = current_expire - timedelta(hours=total_hours)
-                if new_expire < now: new_expire = now
-                u["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
-                if new_expire <= now: u["status"] = "expired"
-                save_user(u)
+    if action == 'toggle_page' and uid:
+        u=get_user(uid); u["page_enabled"]= not u.get("page_enabled",True); save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if request.args.get('action') == 'ban':
-        user_id = request.args.get('user_id')
-        supabase.table("users").delete().eq("user_id", user_id).execute()
+    if action == 'toggle_dl' and uid:
+        u=get_user(uid); u["can_download"]= not u.get("can_download",True); save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if request.args.get('action') == 'reset':
-        user_id = request.args.get('user_id')
-        new_expire = now + timedelta(hours=2)
-        user = get_user(user_id)
-        if user:
-            user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
-            user["status"] = "active"
-            save_user(user)
+    if action == 'ban' and uid:
+        supabase.table("users").delete().eq("user_id", uid).execute()
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if request.args.get('action') in ['add', 'sub']:
-        user_id = request.args.get('user_id')
-        total_hours = get_days_hours_from_args()
-        user = get_user(user_id)
-        if not user:
-            new_expire = now + timedelta(hours=total_hours)
-            user = {"user_id": user_id, "expires_at": new_expire.strftime("%Y-%m-%d %H:%M:%S"), "status": "active"}
-        else:
-            current_expire_str = user.get("expires_at")
-            current_expire = datetime.strptime(current_expire_str, "%Y-%m-%d %H:%M:%S") if current_expire_str else now
-            base_time = max(now, current_expire)
-            if request.args.get('action') == 'add':
-                new_expire = base_time + timedelta(hours=total_hours)
-                user["status"] = "active"
-            else:
-                new_expire = current_expire - timedelta(hours=total_hours)
-                if new_expire < now: new_expire = now
-                if new_expire <= now: user["status"] = "expired"
-            user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
-        save_user(user)
+    if action == 'reset' and uid:
+        u=get_user(uid); u["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); u["status"]="active"; save_user(u)
         return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    if action in ['add','sub','add_all','sub_all']:
+        total = get_days_hours_from_args()
+        users = [get_user(uid)] if action in ['add','sub'] else supabase.table("users").select("*").execute().data
+        for u in users:
+            if not u: continue
+            cur_str = u.get("expires_at"); cur = datetime.strptime(cur_str, "%Y-%m-%d %H:%M:%S") if cur_str else now
+            base = max(now,cur) if 'add' in action else cur
+            new = base+timedelta(hours=total) if 'add' in action else cur-timedelta(hours=total)
+            if new < now: new = now
+            u["expires_at"]=new.strftime("%Y-%m-%d %H:%M:%S"); u["status"]="active" if new>now else "expired"; save_user(u)
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+
     query = supabase.table("users").select("*").order("expires_at", desc=True)
     search = request.args.get('search')
     if search: query = query.ilike("user_id", f"%{search}%")
     all_users = query.execute().data
-    html = f"""
-    <!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>لوحة تحكم الادمن</title>
-    <style>
-        body {{ font-family: Tahoma; background:#f4f4f4; padding:20px; }}
-      .container {{ max-width:1000px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc; }}
-        h2 {{ text-align:center; color:#333; }}
-        table {{ width:100%; border-collapse: collapse; margin-top:20px; table-layout: fixed; }}
-        th {{ background:#007bff; color:white; padding:10px; }}
-        td {{ padding:10px; text-align:center; border-bottom:1px solid #ddd; word-break: break-all; }}
-        input, button {{ padding:8px; margin:5px; border-radius:5px; border:1px solid #ccc; }}
-        button {{ background:#007bff; color:white; cursor:pointer; border:none; }}
-        button:hover {{ background:#0056b3; }}
-      .addall {{ background:#ffc107; padding:15px; border-radius:8px; margin:20px 0; text-align:center; }}
-      .addall button {{ background:#ff8800; }}
-      .suball button {{ background:#dc3545; }}
-      .del {{ background:red; padding:6px 10px; text-decoration:none; color:white; border-radius:5px; font-size:12px; }}
-      .copy {{ background:#28a745; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; cursor:pointer; }}
-      .reset {{ background:#6c757d; padding:6px 10px; font-size:12px; text-decoration:none; color:white; border-radius:5px; }}
-      .actions {{ display:flex; justify-content:center; gap:5px; flex-wrap:wrap; }}
-    </style>
-    <script>
-        function copyID(id) {{ navigator.clipboard.writeText(id); alert('تم نسخ: ' + id); }}
-        function confirmAction(msg) {{ return confirm(msg); }}
-    </script>
-    </head><body><div class="container">
-    <h2>لوحة تحكم الادمن</h2>
-    {msg}
-    <form method="get"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="text" name="search" placeholder="بحث بالـ ID" value="{search if search else ''}"><button type="submit">بحث</button><a href="/admin?key={ADMIN_KEY}"><button type="button">عرض الكل</button></a></form>
-    <div class="addall">
-        <form method="get" style="display:inline-block;" onsubmit="return confirmAction('متأكد تبي تضيف للكل؟')"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="hidden" name="action" value="add_all"><b>للكل:</b><input type="number" name="days" value="0" min="0" style="width:70px;" placeholder="أيام"><input type="number" name="hours" value="2" step="0.5" style="width:70px;" placeholder="ساعات"><button type="submit">+ اضافة</button></form>
-        <form method="get" style="display:inline-block;" class="suball" onsubmit="return confirmAction('تحذير: متأكد تبي تنقص من الكل؟')"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="hidden" name="action" value="sub_all"><input type="number" name="days" value="0" min="0" style="width:70px;" placeholder="أيام"><input type="number" name="hours" value="1" step="0.5" style="width:70px;" placeholder="ساعات"><button type="submit">- تنقيص</button></form>
-    </div>
-    <form method="get"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="text" name="user_id" placeholder="ID الجهاز" required><input type="number" name="days" value="0" min="0" placeholder="أيام" style="width:70px;"><input type="number" name="hours" value="24" step="0.5" placeholder="ساعات" style="width:70px;"><button name="action" value="add">+ زيادة</button><button name="action" value="sub" class="suball">- تنقيص</button></form><hr>
-    <table><tr><th style="width:35%">ID الجهاز</th><th style="width:20%">الوقت المتبقي</th><th style="width:15%">الحالة</th><th style="width:30%">تحكم</th></tr>
-    """
+
+    html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الادمن</title>
+    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:15px}}.c{{max-width:1250px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse;font-size:12px}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:4px 8px;border-radius:4px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:1px}}.on{{background:#28a745}}.off{{background:#dc3545}}
+    </style><script>function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script>
+    </head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
+    <form method="get"><input type="hidden" name="key" value="{ADMIN_KEY}"><input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><button>بحث</button></form>
+    <p>رابط المستخدم العام: <code>{request.host_url}</code> - يفتح صفحة HTML اوتوماتيك</p>
+    <table><tr><th>المستخدم</th><th>الوقت</th><th>صلاحيات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
+
     for u in all_users:
-        remaining = get_remaining_hours(u)
-        remaining_str = format_hm(remaining)
-        status = "🟢 شغال" if remaining > 0 else "🔴 منتهي"
-        html += f"<tr>"
-        html += f"<td dir='ltr' style='font-family: monospace;'>{u['user_id']}</td>"
-        html += f"<td dir='ltr' style='font-weight:bold;'>{remaining_str}</td>"
-        html += f"<td>{status}</td>"
-        html += f"<td><div class='actions'>"
-        html += f"<span class='copy' onclick=\"copyID('{u['user_id']}')\">نسخ</span>"
-        html += f"<a class='reset' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}' onclick=\"return confirmAction('بترجعه 2 ساعات من جديد؟')\">تصفير</a>"
-        html += f"<a class='del' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}' onclick=\"return confirmAction('متأكد تبي تحذف {u['user_id']}؟')\">حذف</a>"
-        html += f"</div></td></tr>"
+        rem = format_hm(get_remaining_hours(u)); allowed = get_allowed_files(u)
+        perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label> " for f in FILES])
+        perm += f"<br><button onclick=\"savePerm('{u['user_id']}')\" style='background:#6610f2;color:white;border:none;padding:3px 6px;border-radius:3px;margin-top:4px;'>حفظ</button>"
+        page_btn = f"<a class='b {'on' if u.get('page_enabled',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_page&user_id={u['user_id']}'>{'مفعلة' if u.get('page_enabled',True) else 'موقوفة'}</a>"
+        dl_btn = f"<a class='b {'on' if u.get('can_download',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_dl&user_id={u['user_id']}'>{'مسموح' if u.get('can_download',True) else 'ممنوع'}</a>"
+        html += f"<tr><td><code>{u['user_id'][:12]}..</code><br><a href='/user/{u['user_id']}' target='_blank'>صفحته ↗</a></td><td dir='ltr'>{rem}</td><td>{perm}</td><td>{page_btn}</td><td>{dl_btn}</td><td><a class='b' style='background:#6c757d' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}'>تصفير</a> <a class='b off' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a><br><form method='get'><input type='hidden' name='key' value='{ADMIN_KEY}'><input type='hidden' name='user_id' value='{u['user_id']}'><input type='number' name='hours' value='24' style='width:45px;'><button name='action' value='add'>+</button><button name='action' value='sub'>-</button></form></td></tr>"
     html += "</table></div></body></html>"
     return html
 
