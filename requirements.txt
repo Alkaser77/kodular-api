@@ -3,3 +3,4 @@ gunicorn==22.0.0
 supabase==2.6.0
 requests==2.31.0
 pyTelegramBotAPI==4.14.0
+flask-cors
