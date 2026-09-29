@@ -2,10 +2,8 @@ from flask import Flask, request, jsonify, redirect, Response
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 import os, requests, json, threading
-
-# --- البوت ---
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 app = Flask(__name__)
 
@@ -37,7 +35,7 @@ def format_hm(hours_float):
     h = total_minutes // 60; m = total_minutes % 60
     if h >= 24:
         d = h // 24; rh = h % 24
-        return f"{d} day{'s' if d>1 else ''} {rh}:{m:02d}"
+        return f"{d} day {rh}:{m:02d}"
     return f"{h}:{m:02d}"
 def get_allowed_files(user):
     if not user or not user.get("allowed_files"): return FILES
@@ -51,17 +49,16 @@ def get_days_hours_from_args():
     hours = float(request.args.get('hours', 0) or 0)
     return days * 24 + hours
 
-# ---- Flask routes نفسها ----
 @app.route('/')
 def home():
     return """<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>جاري التحميل...</title>
     <style>body{font-family:Tahoma;background:#f4f4f4;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-  .box{background:white;padding:30px;border-radius:15px;box-shadow:0 5px 20px #0002;text-align:center;width:90%;max-width:400px}
-  .loader{border:4px solid #f3f3f3;border-top:4px solid #007bff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:15px auto}
+ .box{background:white;padding:30px;border-radius:15px;box-shadow:0 5px 20px #0002;text-align:center;width:90%;max-width:400px}
+ .loader{border:4px solid #f3f3f3;border-top:4px solid #007bff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:15px auto}
     @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style>
     <script>async function start(){let uid=localStorage.getItem('my_user_id');if(!uid){uid='WEB-'+Math.random().toString(36).substr(2,9).toUpperCase()+Date.now().toString().slice(-5);localStorage.setItem('my_user_id',uid);}
-    document.getElementById('uid').innerText=uid;try{let r=await fetch('/check?user_id='+uid);let d=await r.json();if(d.status==='cooldown'){document.getElementById('box').innerHTML='<h2 style=color:#dc3545>⏳ انتهى وقتك</h2><p>ارجع بعد: <b dir=ltr>'+d.hours+'</b></p><p><code>'+uid+'</code></p>';return;}}catch(e){}window.location.href='/user/'+uid;}window.onload=start;</script>
-    </head><body><div class="box" id="box"><div class="loader"></div><h3>لحظة جاري تجهيز صفحتك...</h3><p style="color:#999;font-size:11px;"><code id="uid"></code></p></div></body></html>"""
+    document.getElementById('uid').innerText=uid;try{let r=await fetch('/check?user_id='+uid);let d=await r.json();if(d.status==='cooldown'){document.getElementById('box').innerHTML='<h2 style=color:#dc3545>⏳ انتهى وقتك</h2><p>ارجع بعد: <b dir=ltr>'+d.hours+'</b></p>';return;}}catch(e){}window.location.href='/user/'+uid;}window.onload=start;</script>
+    </head><body><div class="box" id="box"><div class="loader"></div><h3>لحظة جاري تجهيز صفحتك...</h3><p><code id="uid"></code></p></div></body></html>"""
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -110,18 +107,16 @@ def download(filename):
 @app.route('/user/<user_id>')
 def user_page(user_id):
     user = get_user(user_id)
-    if not user: return "<h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2>",404
-    if not user.get("page_enabled", True): return "<h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2>",403
+    if not user: return "<h2>المستخدم غير موجود</h2>",404
+    if not user.get("page_enabled", True): return "<h2 style='color:red'>⛔ موقوفة</h2>",403
     rem = get_remaining_hours(user)
-    if rem <= 0: return f"<html dir='rtl'><head><meta charset='UTF-8'></head><body style='font-family:Tahoma;text-align:center;padding-top:100px;'><h2>⏳ انتهى اشتراكك</h2><p>{user_id}</p><a href='/'>الرئيسية</a></body></html>"
+    if rem <= 0: return f"<h2>⏳ انتهى اشتراكك</h2><p>{user_id}</p>"
     allowed = get_allowed_files(user); can_dl = user.get("can_download", True); cards = ""
     for f in allowed:
         dl = f"{request.host_url}download/{f}?user_id={user_id}"
-        btn = f"<a href='{dl}' style='background:#28a745;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>" if can_dl else "<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>ممنوع</span>"
-        cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
-    return f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title>
-    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0}}.container{{max-width:800px;margin:auto}}.header{{background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:25px;border-radius:15px;text-align:center}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px}}</style>
-    </head><body><div class="container"><div class="header"><h2>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p>متبقي: {format_hm(rem)}</p></div><br><div class="grid">{cards}</div></div></body></html>"""
+        btn = f"<a href='{dl}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;'>⬇️ تحميل</a>" if can_dl else "<span>ممنوع</span>"
+        cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><h4>{f}</h4>{btn}</div>"
+    return f"""<html dir="rtl"><head><meta charset="UTF-8"></head><body style="font-family:Tahoma;background:#f4f4f4;padding:15px;"><div style="max-width:800px;margin:auto;"><div style="background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;"><h2>صفحتك الخاصة</h2><code>{user_id}</code><p>متبقي: {format_hm(rem)}</p></div><br><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
@@ -151,12 +146,12 @@ def admin_panel():
     if search: query = query.ilike("user_id", f"%{search}%")
     all_users = query.execute().data
     html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
-    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px;font-size:12px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8;cursor:pointer}}.small-inp{{width:55px;padding:4px;text-align:center}}
+    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
     </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
-    <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;"><input type="hidden" name="key" value="{ADMIN_KEY}">
-    <input type="text" name="search" placeholder="بحث" value="{search if search else ''}" style="padding:6px;"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
+    <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
+    <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
     <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
-    <table><tr><th>المستخدم + نسخ</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
+    <table><tr><th>المستخدم</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
     for u in all_users:
         rem = format_hm(get_remaining_hours(u)); allowed = get_allowed_files(u)
         perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label><br>" for f in FILES])
@@ -168,35 +163,64 @@ def admin_panel():
     html += "</table></div></body></html>"
     return html
 
-# --- تشغيل البوت في الخلفية ---
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tg_id = str(update.effective_user.id); user_id = f"TG-{tg_id}"
-    try:
-        r = requests.get(f"{API_URL}/check?user_id={user_id}", timeout=10); data = r.json(); hours = data.get('hours', '2:00'); status = data.get('status')
-    except Exception as e:
-        await update.message.reply_text(f"خطأ: {e}"); return
-    if status == 'cooldown':
-        await update.message.reply_text(f"⏳ انتهى وقتك\nارجع بعد: {hours}"); return
-    page_link = f"{API_URL}/user/{user_id}"
-    keyboard = [[InlineKeyboardButton(f"📦 {f}", callback_data=f"dl|{f}|{user_id}") for f in FILES[:2]],[InlineKeyboardButton(f"📦 {FILES[2]}", callback_data=f"dl|{FILES[2]}|{user_id}")],[InlineKeyboardButton("🌐 فتح صفحتي", url=page_link)]]
-    await update.message.reply_text(f"مرحبا {update.effective_user.first_name} 👋\nID: <code>{user_id}</code>\nمتبقي: <b>{hours}</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
-
-async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query; await query.answer(); _, filename, user_id = query.data.split("|")
-    await query.message.reply_text(f"⏳ جاري تجهيز {filename}...")
-    dl_url = f"{API_URL}/download/{filename}?user_id={user_id}"
-    try:
-        r = requests.get(dl_url, timeout=60)
-        if r.status_code!=200: await query.message.reply_text(f"❌ فشل: {r.text[:200]}"); return
-        await context.bot.send_document(chat_id=query.message.chat_id, document=r.content, filename=filename, caption=f"✅ {filename}")
-    except Exception as e: await query.message.reply_text(f"❌ خطأ: {e}")
-
+# --- بوت تليجرام الخفيف ---
 def run_bot():
-    if not BOT_TOKEN: print("BOT_TOKEN missing, bot not started"); return
-    bot_app = Application.builder().token(BOT_TOKEN).build()
-    bot_app.add_handler(CommandHandler("start", start_cmd))
-    bot_app.add_handler(CallbackQueryHandler(button_click))
-    print("Bot started..."); bot_app.run_polling()
+    if not BOT_TOKEN:
+        print("BOT_TOKEN missing")
+        return
+    bot = telebot.TeleBot(BOT_TOKEN)
+    print("Bot started with telebot...")
+
+    @bot.message_handler(commands=['start'])
+    def handle_start(message):
+        tg_id = str(message.from_user.id)
+        user_id = f"TG-{tg_id}"
+        try:
+            r = requests.get(f"{API_URL}/check?user_id={user_id}", timeout=10)
+            data = r.json()
+            hours = data.get('hours', '2:00')
+            status = data.get('status')
+        except Exception as e:
+            bot.reply_to(message, f"خطأ سيرفر: {e}")
+            return
+
+        if status == 'cooldown':
+            bot.reply_to(message, f"⏳ انتهى وقتك\nارجع بعد: {hours}")
+            return
+
+        page_link = f"{API_URL}/user/{user_id}"
+        markup = InlineKeyboardMarkup(row_width=2)
+        for f in FILES:
+            markup.add(InlineKeyboardButton(f"📦 {f}", callback_data=f"dl|{f}|{user_id}"))
+        markup.add(InlineKeyboardButton("🌐 فتح صفحتي", url=page_link))
+
+        bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{hours}</b>", parse_mode='HTML', reply_markup=markup)
+
+    @bot.callback_query_handler(func=lambda call: True)
+    def handle_callback(call):
+        try:
+            _, filename, user_id = call.data.split("|")
+            bot.answer_callback_query(call.id, f"جاري تجهيز {filename}")
+            bot.send_message(call.message.chat.id, f"⏳ جاري تجهيز {filename}...")
+
+            dl_url = f"{API_URL}/download/{filename}?user_id={user_id}"
+            r = requests.get(dl_url, timeout=60)
+            if r.status_code!= 200:
+                bot.send_message(call.message.chat.id, f"❌ فشل: {r.text[:300]}")
+                return
+
+            # نحفظ مؤقت ونبعته
+            tmp_path = f"/tmp/{filename}"
+            with open(tmp_path, 'wb') as f:
+                f.write(r.content)
+
+            with open(tmp_path, 'rb') as f:
+                bot.send_document(call.message.chat.id, f, caption=f"✅ {filename}")
+
+        except Exception as e:
+            bot.send_message(call.message.chat.id, f"❌ خطأ: {e}")
+
+    bot.infinity_polling()
 
 if BOT_TOKEN:
     threading.Thread(target=run_bot, daemon=True).start()
