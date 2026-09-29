@@ -120,110 +120,98 @@ def user_page(user_id):
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
-    key = request.args.get('key')
-    if key!= ADMIN_KEY: return "<h3>key=admin123</h3>", 401
-    now = datetime.now(); msg = "<h3 style='color:green;text-align:center;'>✅ تم</h3>" if request.args.get('msg')=='done' else ""; action = request.args.get('action'); uid = request.args.get('user_id')
-    if action == 'set_perm' and uid:
-        files = [f for f in request.args.get('files','').split(',') if f in FILES]; u = get_user(uid);
-        if u: u["allowed_files"]=files; save_user(u)
-        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if action == 'toggle_page' and uid:
-        u=get_user(uid); u["page_enabled"]= not u.get("page_enabled",True); save_user(u); return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if action == 'toggle_dl' and uid:
-        u=get_user(uid); u["can_download"]= not u.get("can_download",True); save_user(u); return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if action == 'ban' and uid:
-        supabase.table("users").delete().eq("user_id", uid).execute(); return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if action == 'reset' and uid:
-        u=get_user(uid); u["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); u["status"]="active"; save_user(u); return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    if action in ['add','sub','add_all','sub_all']:
-        total = get_days_hours_from_args(); users = [get_user(uid)] if action in ['add','sub'] else supabase.table("users").select("*").execute().data
-        for u in users:
-            if not u: continue; cur_str = u.get("expires_at"); cur = datetime.strptime(cur_str, "%Y-%m-%d %H:%M:%S") if cur_str else now
-            base = max(now,cur) if 'add' in action else cur; new = base+timedelta(hours=total) if 'add' in action else cur-timedelta(hours=total)
-            if new < now: new = now; u["expires_at"]=new.strftime("%Y-%m-%d %H:%M:%S"); u["status"]="active" if new>now else "expired"; save_user(u)
-        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-    query = supabase.table("users").select("*").order("expires_at", desc=True); search = request.args.get('search')
-    if search: query = query.ilike("user_id", f"%{search}%")
-    all_users = query.execute().data
-    html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
-    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
-    </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
-    <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
-    <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
-    <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
-    <table><tr><th>المستخدم</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
-    for u in all_users:
-        rem = format_hm(get_remaining_hours(u)); allowed = get_allowed_files(u)
-        perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label><br>" for f in FILES])
-        perm += f"<button onclick=\"savePerm('{u['user_id']}')\" style='background:#6610f2;color:white;border:none;padding:4px 8px;border-radius:4px;margin-top:5px;width:100%;'>حفظ</button>"
-        page_btn = f"<a class='b {'on' if u.get('page_enabled',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_page&user_id={u['user_id']}'>{'مفعلة' if u.get('page_enabled',True) else 'موقوفة'}</a>"
-        dl_btn = f"<a class='b {'on' if u.get('can_download',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_dl&user_id={u['user_id']}'>{'مسموح' if u.get('can_download',True) else 'ممنوع'}</a>"
-        copy_btns = f"<div><code style='font-size:10px;'>{u['user_id']}</code><br><button class='b copy' onclick=\"copyId('{u['user_id']}')\">📋 نسخ</button><br><a href='/user/{u['user_id']}' target='_blank' class='b' style='background:#6f42c1;'>صفحته</a></div>"
-        html += f"<tr><td>{copy_btns}</td><td dir='ltr'><b>{rem}</b><br><small>{u.get('expires_at','')}</small></td><td>{perm}</td><td>{page_btn}</td><td>{dl_btn}</td><td><a class='b' style='background:#6c757d' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}'>تصفير</a><br><a class='b off' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a><hr><form method='get'><input type='hidden' name='key' value='{ADMIN_KEY}'><input type='hidden' name='user_id' value='{u['user_id']}'><input class='small-inp' type='number' name='days' value='0'><input class='small-inp' type='number' name='hours' value='24'><br><button class='b on' name='action' value='add'>+ اضافة</button><button class='b off' name='action' value='sub'>- تنقيص</button></form></td></tr>"
-    html += "</table></div></body></html>"
-    return html
+    try:
+        key = request.args.get('key')
+        if key!= ADMIN_KEY: return "<h3>key=admin123</h3>", 401
+        now = datetime.now()
+        msg = "<h3 style='color:green;text-align:center;'>✅ تم</h3>" if request.args.get('msg')=='done' else ""
+        action = request.args.get('action')
+        uid = request.args.get('user_id')
 
-# --- بوت تليجرام الخفيف ---
-def run_bot():
-    if not BOT_TOKEN:
-        print("BOT_TOKEN missing")
-        return
-    bot = telebot.TeleBot(BOT_TOKEN)
-    print("Bot started with telebot...")
+        def parse_expire(s):
+            if not s: return now
+            try:
+                # يدعم الصيغتين 2024-01-01 12:00:00 و 2024-01-01T12:00:00
+                s = s.replace('T',' ').split('.')[0]
+                return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+            except:
+                try:
+                    return datetime.fromisoformat(s.replace('Z',''))
+                except:
+                    return now
 
-    @bot.message_handler(commands=['start'])
-    def handle_start(message):
-        tg_id = str(message.from_user.id)
-        user_id = f"TG-{tg_id}"
-        try:
-            r = requests.get(f"{API_URL}/check?user_id={user_id}", timeout=10)
-            data = r.json()
-            hours = data.get('hours', '2:00')
-            status = data.get('status')
-        except Exception as e:
-            bot.reply_to(message, f"خطأ سيرفر: {e}")
-            return
+        if action == 'set_perm' and uid:
+            files = [f for f in request.args.get('files','').split(',') if f in FILES]
+            u = get_user(uid)
+            if u: u["allowed_files"]=files; save_user(u)
+            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+        if action == 'toggle_page' and uid:
+            u=get_user(uid)
+            if u:
+                u["page_enabled"]= not u.get("page_enabled",True); save_user(u)
+            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+        if action == 'toggle_dl' and uid:
+            u=get_user(uid)
+            if u:
+                u["can_download"]= not u.get("can_download",True); save_user(u)
+            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+        if action == 'ban' and uid:
+            supabase.table("users").delete().eq("user_id", uid).execute()
+            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+        if action == 'reset' and uid:
+            u=get_user(uid)
+            if u:
+                u["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); u["status"]="active"; save_user(u)
+            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+        if action in ['add','sub','add_all','sub_all']:
+            try:
+                days = float(request.args.get('days', 0) or 0)
+                hours = float(request.args.get('hours', 0) or 0)
+                total = days*24 + hours
+            except:
+                total = 0
 
-        if status == 'cooldown':
-            bot.reply_to(message, f"⏳ انتهى وقتك\nارجع بعد: {hours}")
-            return
+            if action in ['add','sub']:
+                users_list = [get_user(uid)] if uid else []
+            else:
+                users_list = supabase.table("users").select("*").execute().data
 
-        page_link = f"{API_URL}/user/{user_id}"
-        markup = InlineKeyboardMarkup(row_width=2)
-        for f in FILES:
-            markup.add(InlineKeyboardButton(f"📦 {f}", callback_data=f"dl|{f}|{user_id}"))
-        markup.add(InlineKeyboardButton("🌐 فتح صفحتي", url=page_link))
+            for u in users_list:
+                if not u: continue
+                cur = parse_expire(u.get("expires_at"))
+                if 'add' in action:
+                    base = cur if cur > now else now
+                    new = base + timedelta(hours=total)
+                else:
+                    new = cur - timedelta(hours=total)
+                    if new < now: new = now - timedelta(minutes=1) # باش يطيح في كول داون
 
-        bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{hours}</b>", parse_mode='HTML', reply_markup=markup)
+                u["expires_at"]=new.strftime("%Y-%m-%d %H:%M:%S")
+                u["status"]="active" if new>now else "expired"
+                save_user(u)
+            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
 
-    @bot.callback_query_handler(func=lambda call: True)
-    def handle_callback(call):
-        try:
-            _, filename, user_id = call.data.split("|")
-            bot.answer_callback_query(call.id, f"جاري تجهيز {filename}")
-            bot.send_message(call.message.chat.id, f"⏳ جاري تجهيز {filename}...")
+        query = supabase.table("users").select("*").order("expires_at", desc=True)
+        search = request.args.get('search')
+        if search: query = query.ilike("user_id", f"%{search}%")
+        all_users = query.execute().data
 
-            dl_url = f"{API_URL}/download/{filename}?user_id={user_id}"
-            r = requests.get(dl_url, timeout=60)
-            if r.status_code!= 200:
-                bot.send_message(call.message.chat.id, f"❌ فشل: {r.text[:300]}")
-                return
-
-            # نحفظ مؤقت ونبعته
-            tmp_path = f"/tmp/{filename}"
-            with open(tmp_path, 'wb') as f:
-                f.write(r.content)
-
-            with open(tmp_path, 'rb') as f:
-                bot.send_document(call.message.chat.id, f, caption=f"✅ {filename}")
-
-        except Exception as e:
-            bot.send_message(call.message.chat.id, f"❌ خطأ: {e}")
-
-    bot.infinity_polling()
-
-if BOT_TOKEN:
-    threading.Thread(target=run_bot, daemon=True).start()
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+        html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
+        <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
+        </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
+        <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
+        <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
+        <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
+        <table><tr><th>المستخدم</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
+        for u in all_users:
+            rem = format_hm(get_remaining_hours(u)); allowed = get_allowed_files(u)
+            perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label><br>" for f in FILES])
+            perm += f"<button onclick=\"savePerm('{u['user_id']}')\" style='background:#6610f2;color:white;border:none;padding:4px 8px;border-radius:4px;margin-top:5px;width:100%;'>حفظ</button>"
+            page_btn = f"<a class='b {'on' if u.get('page_enabled',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_page&user_id={u['user_id']}'>{'مفعلة' if u.get('page_enabled',True) else 'موقوفة'}</a>"
+            dl_btn = f"<a class='b {'on' if u.get('can_download',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_dl&user_id={u['user_id']}'>{'مسموح' if u.get('can_download',True) else 'ممنوع'}</a>"
+            copy_btns = f"<div><code style='font-size:10px;'>{u['user_id']}</code><br><button class='b copy' onclick=\"copyId('{u['user_id']}')\">📋 نسخ</button><br><a href='/user/{u['user_id']}' target='_blank' class='b' style='background:#6f42c1;'>صفحته</a></div>"
+            html += f"<tr><td>{copy_btns}</td><td dir='ltr'><b>{rem}</b><br><small>{u.get('expires_at','')}</small></td><td>{perm}</td><td>{page_btn}</td><td>{dl_btn}</td><td><a class='b' style='background:#6c757d' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}'>تصفير</a><br><a class='b off' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a><hr><form method='get'><input type='hidden' name='key' value='{ADMIN_KEY}'><input type='hidden' name='user_id' value='{u['user_id']}'><input class='small-inp' type='number' name='days' value='0'><input class='small-inp' type='number' name='hours' value='24'><br><button class='b on' name='action' value='add'>+ اضافة</button><button class='b off' name='action' value='sub'>- تنقيص</button></form></td></tr>"
+        html += "</table></div></body></html>"
+        return html
+    except Exception as e:
+        return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
