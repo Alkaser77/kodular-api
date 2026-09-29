@@ -50,7 +50,7 @@ def format_hm(hours_float):
     m = int((hours_float - (days*24 + h)) * 60)
     if days > 0:
         # يطلع هكي: 2 يوم 8:29
-        return f"{days} يوم {h}:{m:02d}"
+        return f"{days} days {h}:{m:02d}"
     else:
         return f"{h}:{m:02d}"
 
