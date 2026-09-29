@@ -27,9 +27,10 @@ def save_user(user):
 def get_remaining_hours(user):
     if not user or not user.get("expires_at"): return 0
     try:
-        expires = datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
+        expires = parse_expire(user.get("expires_at"))
         return max(0, (expires - datetime.now()).total_seconds() / 3600)
-    except: return 0
+    except:
+        return 0
 def format_hm(hours_float):
     total_minutes = int(round(hours_float * 60))
     h = total_minutes // 60; m = total_minutes % 60
@@ -129,89 +130,48 @@ def admin_panel():
         uid = request.args.get('user_id')
 
         def parse_expire(s):
-            if not s: return now
-            try:
-                # يدعم الصيغتين 2024-01-01 12:00:00 و 2024-01-01T12:00:00
-                s = s.replace('T',' ').split('.')[0]
-                return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
-            except:
-                try:
-                    return datetime.fromisoformat(s.replace('Z',''))
-                except:
-                    return now
+    if not s: return datetime.now()
+    try:
+        s = s.replace('T',' ').split('.')[0]
+        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    except:
+        try:
+            return datetime.fromisoformat(s.replace('Z',''))
+        except:
+            return datetime.now()
 
-        if action == 'set_perm' and uid:
-            files = [f for f in request.args.get('files','').split(',') if f in FILES]
-            u = get_user(uid)
-            if u: u["allowed_files"]=files; save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'toggle_page' and uid:
-            u=get_user(uid)
-            if u:
-                u["page_enabled"]= not u.get("page_enabled",True); save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'toggle_dl' and uid:
-            u=get_user(uid)
-            if u:
-                u["can_download"]= not u.get("can_download",True); save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'ban' and uid:
-            supabase.table("users").delete().eq("user_id", uid).execute()
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'reset' and uid:
-            u=get_user(uid)
-            if u:
-                u["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); u["status"]="active"; save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action in ['add','sub','add_all','sub_all']:
-            try:
-                days = float(request.args.get('days', 0) or 0)
-                hours = float(request.args.get('hours', 0) or 0)
-                total = days*24 + hours
-            except:
-                total = 0
+@app.route('/check', methods=['GET'])
+def check():
+    user_id = request.args.get('user_id')
+    if not user_id: return jsonify({"error": "user_id missing"}), 400
+    try:
+        now = datetime.now()
+        user = get_user(user_id)
+        allowed = get_allowed_files(user) if user else FILES
+        base_url = request.host_url
+        links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
 
-            if action in ['add','sub']:
-                users_list = [get_user(uid)] if uid else []
+        if not user:
+            expires = now + timedelta(hours=2)
+            user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
+            save_user(user)
+            return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
+
+        remaining = get_remaining_hours(user)
+        if remaining <= 0:
+            last_expire = parse_expire(user.get("expires_at"))
+            hours_since_expire = (now - last_expire).total_seconds() / 3600
+            if hours_since_expire >= 24:
+                new_expire = now + timedelta(hours=2)
+                user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
+                user["status"] = "active"
+                save_user(user)
+                return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
             else:
-                users_list = supabase.table("users").select("*").execute().data
+                remaining_cooldown = max(0, 24 - hours_since_expire)
+                save_user(user)
+                return jsonify({"status": "cooldown", "message": f"Wait {format_hm(remaining_cooldown)} hours", "hours": format_hm(remaining_cooldown), "hours_float": round(remaining_cooldown, 2), "links": [], "files": []})
 
-            for u in users_list:
-                if not u: continue
-                cur = parse_expire(u.get("expires_at"))
-                if 'add' in action:
-                    base = cur if cur > now else now
-                    new = base + timedelta(hours=total)
-                else:
-                    new = cur - timedelta(hours=total)
-                    if new < now: new = now - timedelta(minutes=1) # باش يطيح في كول داون
-
-                u["expires_at"]=new.strftime("%Y-%m-%d %H:%M:%S")
-                u["status"]="active" if new>now else "expired"
-                save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
-        query = supabase.table("users").select("*").order("expires_at", desc=True)
-        search = request.args.get('search')
-        if search: query = query.ilike("user_id", f"%{search}%")
-        all_users = query.execute().data
-
-        html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
-        <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
-        </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
-        <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
-        <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
-        <table><tr><th>المستخدم</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
-        for u in all_users:
-            rem = format_hm(get_remaining_hours(u)); allowed = get_allowed_files(u)
-            perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label><br>" for f in FILES])
-            perm += f"<button onclick=\"savePerm('{u['user_id']}')\" style='background:#6610f2;color:white;border:none;padding:4px 8px;border-radius:4px;margin-top:5px;width:100%;'>حفظ</button>"
-            page_btn = f"<a class='b {'on' if u.get('page_enabled',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_page&user_id={u['user_id']}'>{'مفعلة' if u.get('page_enabled',True) else 'موقوفة'}</a>"
-            dl_btn = f"<a class='b {'on' if u.get('can_download',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_dl&user_id={u['user_id']}'>{'مسموح' if u.get('can_download',True) else 'ممنوع'}</a>"
-            copy_btns = f"<div><code style='font-size:10px;'>{u['user_id']}</code><br><button class='b copy' onclick=\"copyId('{u['user_id']}')\">📋 نسخ</button><br><a href='/user/{u['user_id']}' target='_blank' class='b' style='background:#6f42c1;'>صفحته</a></div>"
-            html += f"<tr><td>{copy_btns}</td><td dir='ltr'><b>{rem}</b><br><small>{u.get('expires_at','')}</small></td><td>{perm}</td><td>{page_btn}</td><td>{dl_btn}</td><td><a class='b' style='background:#6c757d' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}'>تصفير</a><br><a class='b off' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a><hr><form method='get'><input type='hidden' name='key' value='{ADMIN_KEY}'><input type='hidden' name='user_id' value='{u['user_id']}'><input class='small-inp' type='number' name='days' value='0'><input class='small-inp' type='number' name='hours' value='24'><br><button class='b on' name='action' value='add'>+ اضافة</button><button class='b off' name='action' value='sub'>- تنقيص</button></form></td></tr>"
-        html += "</table></div></body></html>"
-        return html
+        return jsonify({"status": "active", "links": links, "files": allowed, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
     except Exception as e:
-        return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
+        return jsonify({"status": "error", "error": str(e)}), 500
