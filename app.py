@@ -14,12 +14,6 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 app = Flask(__name__)
 CORS(app)
 
-# === اعدادات الربح ===
-ENABLE_SHORTENER = True  # خليها True باش تربح من التحميل
-EXE_API_KEY = "d86a4a4c08ede6658584bdb4ca3662f851265c49"
-TELEGRAM_AD_LINK = ""
-TELEGRAM_AD_IMAGE = ""
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 DRIVE_NPVT_ID = os.getenv("DRIVE_NPVT_ID")
