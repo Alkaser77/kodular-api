@@ -86,12 +86,7 @@ def get_user(user_id):
         return None
     except:
         return None
-
-# --- الصفحة الرئيسية ---
-@app.route('/')
-def index():
-    return "<h2 style='text-align:center;margin-top:50px;font-family:Tahoma;'>السيرفر شغال ✅<br><br><a href='/admin?key=admin123'>الادمن</a></h2>"
-
+        
 # --- فحص كودولار ---
 @app.route('/check', methods=['GET'])
 def check():
