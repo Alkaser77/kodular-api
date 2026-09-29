@@ -53,7 +53,6 @@ def format_hm(hours_float):
         return f"{days} days {h}:{m:02d}"
     else:
         return f"{h}:{m:02d}"
-
 def get_allowed_files(user):
     if not user:
         return FILES
@@ -86,7 +85,11 @@ def get_user(user_id):
         return None
     except:
         return None
-        
+
+# --- الصفحة الرئيسية ---
+@app.route('/')
+def index():
+    return "", 200
 # --- فحص كودولار ---
 @app.route('/check', methods=['GET'])
 def check():
@@ -166,6 +169,7 @@ def user_page(user_id):
     rem = get_remaining_hours(user)
     is_expired = rem <= 0
     wait_str = ""
+
     if is_expired:
         try:
             exp_date = parse_expire(user.get("expires_at"))
@@ -197,12 +201,11 @@ def user_page(user_id):
 
     cards = ""
     for f in allowed:
-        original_dl = f"{request.host_url}download/{f}?user_id={user_id}"
-        dl = shorten_url(original_dl) if can_dl else "#"
+        dl = f"{request.host_url}download/{f}?user_id={user_id}"
         if can_dl:
-            btn = f"<a href='{dl}' target='_blank' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
+            btn = f"<a href='{dl}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
         else:
-            btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
+            btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل - انتهى اشتراكك</span>"
         cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
 
     return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
