@@ -1,14 +1,16 @@
 import os
 import requests
 from flask import Flask, jsonify, request, redirect, send_file
-from flask_cors import CORS
+try:
+    from flask_cors import CORS
+except:
+    CORS = lambda x: x
 from supabase import create_client
 from datetime import datetime, timedelta
 import io
 import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-
 app = Flask(__name__)
 CORS(app)
 
