@@ -14,6 +14,12 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 app = Flask(__name__)
 CORS(app)
 
+# === اعدادات الربح ===
+ENABLE_SHORTENER = True  # خليها True باش تربح من التحميل
+EXE_API_KEY = "d86a4a4c08ede6658584bdb4ca3662f851265c49"
+TELEGRAM_AD_LINK = ""
+TELEGRAM_AD_IMAGE = ""
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 DRIVE_NPVT_ID = os.getenv("DRIVE_NPVT_ID")
@@ -166,7 +172,6 @@ def user_page(user_id):
     rem = get_remaining_hours(user)
     is_expired = rem <= 0
     wait_str = ""
-
     if is_expired:
         try:
             exp_date = parse_expire(user.get("expires_at"))
@@ -198,11 +203,12 @@ def user_page(user_id):
 
     cards = ""
     for f in allowed:
-        dl = f"{request.host_url}download/{f}?user_id={user_id}"
+        original_dl = f"{request.host_url}download/{f}?user_id={user_id}"
+        dl = shorten_url(original_dl) if can_dl else "#"
         if can_dl:
-            btn = f"<a href='{dl}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
+            btn = f"<a href='{dl}' target='_blank' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
         else:
-            btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل - انتهى اشتراكك</span>"
+            btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
         cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
 
     return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
