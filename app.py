@@ -45,9 +45,14 @@ def parse_expire(s):
 def format_hm(hours_float):
     if hours_float <= 0:
         return "0:00"
-    h = int(hours_float)
-    m = int((hours_float - h) * 60)
-    return f"{h}:{m:02d}"
+    days = int(hours_float // 24)
+    h = int(hours_float % 24)
+    m = int((hours_float - (days*24 + h)) * 60)
+    if days > 0:
+        # يطلع هكي: 2 يوم 8:29
+        return f"{days} يوم {h}:{m:02d}"
+    else:
+        return f"{h}:{m:02d}"
 
 def get_allowed_files(user):
     if not user:
