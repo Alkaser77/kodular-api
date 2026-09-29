@@ -21,6 +21,22 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://file-4-2311.onrender.com")
 ADMIN_KEY = "admin123"
 
+# === اعدادات الربح - طافية توا باش ما اديرش 500 ===
+ENABLE_SHORTENER = True
+EXE_API_KEY = "d86a4a4c08ede6658584bdb4ca3662f851265c49"
+
+def shorten_url(long_url):
+    if not ENABLE_SHORTENER or not EXE_API_KEY:
+        return long_url
+    try:
+        r = requests.get(f"https://exe.io/api?api={EXE_API_KEY}&url={long_url}", timeout=5)
+        data = r.json()
+        if data.get("status") == "success" and data.get("shortenedUrl"):
+            return data.get("shortenedUrl")
+        return long_url
+    except:
+        return long_url
+
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("Supabase missing")
 
@@ -49,10 +65,10 @@ def format_hm(hours_float):
     h = int(hours_float % 24)
     m = int((hours_float - (days*24 + h)) * 60)
     if days > 0:
-        # يطلع هكي: 2 يوم 8:29
         return f"{days} days {h}:{m:02d}"
     else:
         return f"{h}:{m:02d}"
+
 def get_allowed_files(user):
     if not user:
         return FILES
@@ -90,6 +106,7 @@ def get_user(user_id):
 @app.route('/')
 def index():
     return "", 200
+
 # --- فحص كودولار ---
 @app.route('/check', methods=['GET'])
 def check():
@@ -157,63 +174,66 @@ def download(filename):
     except Exception as e:
         return f"Download error: {e}", 500
 
-# --- صفحة المستخدم ---
+# --- صفحة المستخدم - بدون بانر ومصلحة 100% ---
 @app.route('/user/<user_id>')
 def user_page(user_id):
-    user = get_user(user_id)
-    if not user:
-        return "<h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2>", 404
-    if not user.get("page_enabled", True):
-        return "<h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2>", 403
+    try:
+        user = get_user(user_id)
+        if not user:
+            return "<h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2>", 404
+        if not user.get("page_enabled", True):
+            return "<h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2>", 403
 
-    rem = get_remaining_hours(user)
-    is_expired = rem <= 0
-    wait_str = ""
+        rem = get_remaining_hours(user)
+        is_expired = rem <= 0
+        wait_str = ""
+        if is_expired:
+            try:
+                exp_date = parse_expire(user.get("expires_at"))
+                hours_since = (datetime.now() - exp_date).total_seconds() / 3600
+                wait = max(0, 24 - hours_since)
+                wait_str = format_hm(wait)
+            except:
+                wait_str = "24:00"
 
-    if is_expired:
-        try:
-            exp_date = parse_expire(user.get("expires_at"))
-            hours_since = (datetime.now() - exp_date).total_seconds() / 3600
-            wait = max(0, 24 - hours_since)
-            wait_str = format_hm(wait)
-        except:
-            wait_str = "24:00"
+        allowed = get_allowed_files(user)
+        can_dl = False if is_expired else user.get("can_download", True)
 
-    allowed = get_allowed_files(user)
-    can_dl = False if is_expired else user.get("can_download", True)
-
-    if is_expired:
-        banner = f"""
-        <div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'>
-            <h3 style='margin:0;'>⏳ انتهى اشتراكك</h3>
-            <p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p>
-            <small>ID: {user_id}</small>
-        </div>
-        """
-    else:
-        banner = f"""
-        <div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;'>
-            <h2 style='margin:0;'>صفحتك الخاصة</h2>
-            <small><code>{user_id}</code></small>
-            <p>متبقي: {format_hm(rem)}</p>
-        </div>
-        """
-
-    cards = ""
-    for f in allowed:
-        dl = f"{request.host_url}download/{f}?user_id={user_id}"
-        if can_dl:
-            btn = f"<a href='{dl}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
+        if is_expired:
+            banner = f"""
+            <div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'>
+                <h3 style='margin:0;'>⏳ انتهى اشتراكك</h3>
+                <p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p>
+                <small>ID: {user_id}</small>
+            </div>
+            """
         else:
-            btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل - انتهى اشتراكك</span>"
-        cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
+            banner = f"""
+            <div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'>
+                <h2 style='margin:0;'>صفحتك الخاصة</h2>
+                <small><code>{user_id}</code></small>
+                <p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p>
+            </div>
+            """
 
-    return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
-    <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;">
-    <div style="max-width:800px;margin:auto;">
-    {banner}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div>
-    </div></body></html>"""
+        cards = ""
+        for f in allowed:
+            original_dl = f"{request.host_url}download/{f}?user_id={user_id}"
+            dl_link = shorten_url(original_dl) if can_dl else "#"
+            if can_dl:
+                btn = f"<a href='{dl_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
+            else:
+                btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
+            cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
+
+        return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
+        <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;">
+        <div style="max-width:800px;margin:auto;">
+        {banner}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div>
+        </div></body></html>"""
+    except Exception as e:
+        return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
 
 # --- الادمن ---
 @app.route('/admin', methods=['GET'])
