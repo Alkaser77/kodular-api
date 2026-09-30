@@ -11,6 +11,8 @@ import io
 import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from urllib.parse import quote
+
 app = Flask(__name__)
 CORS(app)
 
@@ -21,31 +23,53 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://file-4-2311.onrender.com")
 ADMIN_KEY = "admin123"
 
-# === اعدادات الربح - طافية توا باش ما اديرش 500 ===
 ENABLE_SHORTENER = True
 EXE_API_KEY = "d86a4a4c08ede6658584bdb4ca3662f851265c49"
-
-def shorten_url(long_url):
-    if not ENABLE_SHORTENER or not EXE_API_KEY:
-        return long_url
-    try:
-        r = requests.get(f"https://exe.io/api?api={EXE_API_KEY}&url={long_url}", timeout=5)
-        data = r.json()
-        if data.get("status") == "success" and data.get("shortenedUrl"):
-            return data.get("shortenedUrl")
-        return long_url
-    except:
-        return long_url
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("Supabase missing")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 FOLDER = "files"
 FILES = ["File.ssc", "File.npvt", "File.nm"]
 
-# --- دوال مساعدة ---
+# === الكاش باش ما نكلمش Supabase واجد ===
+SHORT_CACHE = {}
+
+def get_or_create_short(file_key, long_url):
+    if not ENABLE_SHORTENER or not EXE_API_KEY:
+        return long_url
+
+    # 1. شوف الكاش في الذاكرة
+    if file_key in SHORT_CACHE:
+        return SHORT_CACHE[file_key]
+
+    # 2. شوف في Supabase
+    try:
+        res = supabase.table("short_links").select("short_url").eq("file_key", file_key).execute()
+        if res.data and len(res.data) > 0:
+            SHORT_CACHE[file_key] = res.data[0]["short_url"]
+            return res.data[0]["short_url"]
+    except Exception as e:
+        print(f"cache read error: {e}")
+
+    # 3. ما فيش، صنع جديد
+    try:
+        encoded = quote(long_url, safe='')
+        r = requests.get(f"https://exe.io/api?api={EXE_API_KEY}&url={encoded}", timeout=10)
+        data = r.json()
+        if data.get("status") == "success" and data.get("shortenedUrl"):
+            short_url = data.get("shortenedUrl")
+            SHORT_CACHE[file_key] = short_url
+            # احفظه
+            try:
+                supabase.table("short_links").upsert({"file_key": file_key, "short_url": short_url}).execute()
+            except Exception as e:
+                print(f"cache save error: {e}")
+            return short_url
+    except Exception as e:
+        print(f"exe.io error: {e}")
+
+    return long_url
+
 def parse_expire(s):
     if not s:
         return datetime.now()
@@ -102,12 +126,10 @@ def get_user(user_id):
     except:
         return None
 
-# --- الصفحة الرئيسية ---
 @app.route('/')
 def index():
     return "", 200
 
-# --- فحص كودولار ---
 @app.route('/check', methods=['GET'])
 def check():
     user_id = request.args.get('user_id')
@@ -145,7 +167,6 @@ def check():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
-# --- التحميل ---
 @app.route('/download/<filename>', methods=['GET'])
 def download(filename):
     if filename not in FILES:
@@ -160,7 +181,6 @@ def download(filename):
         return "Download disabled by admin", 403
     if get_remaining_hours(user) <= 0:
         return "Subscription ended", 403
-
     try:
         if filename == "File.npvt":
             gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
@@ -174,7 +194,6 @@ def download(filename):
     except Exception as e:
         return f"Download error: {e}", 500
 
-# --- صفحة المستخدم - بدون بانر ومصلحة 100% ---
 @app.route('/user/<user_id>')
 def user_page(user_id):
     try:
@@ -200,28 +219,19 @@ def user_page(user_id):
         can_dl = False if is_expired else user.get("can_download", True)
 
         if is_expired:
-            banner = f"""
-            <div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'>
-                <h3 style='margin:0;'>⏳ انتهى اشتراكك</h3>
-                <p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p>
-                <small>ID: {user_id}</small>
-            </div>
-            """
+            banner = f"""<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3 style='margin:0;'>⏳ انتهى اشتراكك</h3><p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p><small>ID: {user_id}</small></div>"""
         else:
-            banner = f"""
-            <div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'>
-                <h2 style='margin:0;'>صفحتك الخاصة</h2>
-                <small><code>{user_id}</code></small>
-                <p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p>
-            </div>
-            """
+            banner = f"""<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2 style='margin:0;'>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p></div>"""
 
         cards = ""
         for f in allowed:
             original_dl = f"{request.host_url}download/{f}?user_id={user_id}"
-            dl_link = shorten_url(original_dl) if can_dl else "#"
+            # === التعديل المهم هنا ===
+            file_key = f"{f}" # كل ملف ليه رابط واحد ثابت للكل
+            dl_link = get_or_create_short(file_key, original_dl) if can_dl else "#"
+
             if can_dl:
-                btn = f"<a href='{dl_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
+                btn = f"<a href='{dl_link}' target='_blank' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
             else:
                 btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
             cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
@@ -235,7 +245,6 @@ def user_page(user_id):
     except Exception as e:
         return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
 
-# --- الادمن ---
 @app.route('/admin', methods=['GET'])
 def admin_panel():
     try:
@@ -332,7 +341,6 @@ def admin_panel():
     except Exception as e:
         return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
 
-# --- بوت تليجرام ---
 def run_bot():
     if not BOT_TOKEN:
         print("BOT_TOKEN missing")
