@@ -11,7 +11,6 @@ import io
 import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from urllib.parse import quote
 
 app = Flask(__name__)
 CORS(app)
@@ -20,55 +19,15 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 DRIVE_NPVT_ID = os.getenv("DRIVE_NPVT_ID")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_URL = os.getenv("API_URL", "https://file-4-2311.onrender.com")
+API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
-ENABLE_SHORTENER = True
-EXE_API_KEY = "d86a4a4c08ede6658584bdb4ca3662f851265c49"
+# === الربح مطفي ===
+ENABLE_SHORTENER = False
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 FOLDER = "files"
 FILES = ["File.ssc", "File.npvt", "File.nm"]
-
-# === الكاش باش ما نكلمش Supabase واجد ===
-SHORT_CACHE = {}
-
-def get_or_create_short(file_key, long_url):
-    if not ENABLE_SHORTENER or not EXE_API_KEY:
-        return long_url
-
-    # 1. شوف الكاش في الذاكرة
-    if file_key in SHORT_CACHE:
-        return SHORT_CACHE[file_key]
-
-    # 2. شوف في Supabase
-    try:
-        res = supabase.table("short_links").select("short_url").eq("file_key", file_key).execute()
-        if res.data and len(res.data) > 0:
-            SHORT_CACHE[file_key] = res.data[0]["short_url"]
-            return res.data[0]["short_url"]
-    except Exception as e:
-        print(f"cache read error: {e}")
-
-    # 3. ما فيش، صنع جديد
-    try:
-        encoded = quote(long_url, safe='')
-        r = requests.get(f"https://exe.io/api?api={EXE_API_KEY}&url={encoded}", timeout=10)
-        data = r.json()
-        if data.get("status") == "success" and data.get("shortenedUrl"):
-            short_url = data.get("shortenedUrl")
-            SHORT_CACHE[file_key] = short_url
-            # احفظه
-            try:
-                supabase.table("short_links").upsert({"file_key": file_key, "short_url": short_url}).execute()
-            except Exception as e:
-                print(f"cache save error: {e}")
-            return short_url
-    except Exception as e:
-        print(f"exe.io error: {e}")
-
-    return long_url
 
 def parse_expire(s):
     if not s:
@@ -128,7 +87,7 @@ def get_user(user_id):
 
 @app.route('/')
 def index():
-    return "", 200
+    return "OK - Server Alive", 200
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -141,13 +100,11 @@ def check():
         allowed = get_allowed_files(user) if user else FILES
         base_url = request.host_url
         links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
-
         if not user:
             expires = now + timedelta(hours=2)
             user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
             save_user(user)
             return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
-
         remaining = get_remaining_hours(user)
         if remaining <= 0:
             last_expire = parse_expire(user.get("expires_at"))
@@ -162,7 +119,6 @@ def check():
                 remaining_cooldown = max(0, 24 - hours_since_expire)
                 save_user(user)
                 return jsonify({"status": "cooldown", "message": f"Wait {format_hm(remaining_cooldown)} hours", "hours": format_hm(remaining_cooldown), "hours_float": round(remaining_cooldown, 2), "links": [], "files": []})
-
         return jsonify({"status": "active", "links": links, "files": allowed, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
@@ -202,7 +158,6 @@ def user_page(user_id):
             return "<h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2>", 404
         if not user.get("page_enabled", True):
             return "<h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2>", 403
-
         rem = get_remaining_hours(user)
         is_expired = rem <= 0
         wait_str = ""
@@ -214,34 +169,22 @@ def user_page(user_id):
                 wait_str = format_hm(wait)
             except:
                 wait_str = "24:00"
-
         allowed = get_allowed_files(user)
         can_dl = False if is_expired else user.get("can_download", True)
-
         if is_expired:
-            banner = f"""<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3 style='margin:0;'>⏳ انتهى اشتراكك</h3><p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p><small>ID: {user_id}</small></div>"""
+            banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3 style='margin:0;'>⏳ انتهى اشتراكك</h3><p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p><small>ID: {user_id}</small></div>"
         else:
-            banner = f"""<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2 style='margin:0;'>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p></div>"""
-
+            banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2 style='margin:0;'>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p></div>"
         cards = ""
         for f in allowed:
-            original_dl = f"{request.host_url}download/{f}?user_id={user_id}"
-            # === التعديل المهم هنا ===
-            file_key = f"{f}" # كل ملف ليه رابط واحد ثابت للكل
-            dl_link = get_or_create_short(file_key, original_dl) if can_dl else "#"
-
+            dl_link = f"{request.host_url}download/{f}?user_id={user_id}"
             if can_dl:
-                btn = f"<a href='{dl_link}' target='_blank' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل</a>"
+                btn = f"<a href='{dl_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل مباشر</a>"
             else:
                 btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
             cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
-
         return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
-        <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;">
-        <div style="max-width:800px;margin:auto;">
-        {banner}
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div>
-        </div></body></html>"""
+        <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
     except Exception as e:
         return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
 
@@ -255,7 +198,6 @@ def admin_panel():
         msg = "<h3 style='color:green;text-align:center;'>✅ تم</h3>" if request.args.get('msg') == 'done' else ""
         action = request.args.get('action')
         uid = request.args.get('user_id')
-
         if action == 'set_perm' and uid:
             files = [f for f in request.args.get('files', '').split(',') if f in FILES]
             u = get_user(uid)
@@ -292,12 +234,10 @@ def admin_panel():
                 total = days * 24 + hours
             except:
                 total = 0
-
             if action in ['add', 'sub']:
                 users_list = [get_user(uid)] if uid else []
             else:
                 users_list = supabase.table("users").select("*").execute().data
-
             for u in users_list:
                 if not u:
                     continue
@@ -313,13 +253,11 @@ def admin_panel():
                 u["status"] = "active" if new > now else "expired"
                 save_user(u)
             return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-
         query = supabase.table("users").select("*").order("expires_at", desc=True)
         search = request.args.get('search')
         if search:
             query = query.ilike("user_id", f"%{search}%")
         all_users = query.execute().data
-
         html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
         <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
         </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
@@ -341,95 +279,85 @@ def admin_panel():
     except Exception as e:
         return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
 
+# --- بوت فقط صفحة ---
 def run_bot():
-    if not BOT_TOKEN:
-        print("BOT_TOKEN missing")
-        return
-    bot = telebot.TeleBot(BOT_TOKEN)
-    print("Bot started...")
-
-    @bot.message_handler(commands=['start'])
-    def handle_start(message):
-        tg_id = str(message.from_user.id)
-        user_id = f"TG-{tg_id}"
+    while True:
         try:
-            user = get_user(user_id)
-            if not user:
-                expires = datetime.now() + timedelta(hours=2)
-                user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
-                save_user(user)
-                rem = 2.0
-                is_cooldown = False
-                wait_str = ""
-            else:
-                rem = get_remaining_hours(user)
-                if rem <= 0:
-                    exp_date = parse_expire(user.get("expires_at"))
-                    hours_since = (datetime.now() - exp_date).total_seconds() / 3600
-                    if hours_since < 24:
-                        is_cooldown = True
-                        wait_str = format_hm(24 - hours_since)
-                    else:
-                        new_exp = datetime.now() + timedelta(hours=2)
-                        user["expires_at"] = new_exp.strftime("%Y-%m-%d %H:%M:%S")
-                        user["status"] = "active"
+            if not BOT_TOKEN:
+                print("BOT_TOKEN missing")
+                return
+            bot = telebot.TeleBot(BOT_TOKEN)
+            print("Bot started - page only mode")
+
+            @bot.message_handler(commands=['start'])
+            def handle_start(message):
+                tg_id = str(message.from_user.id)
+                user_id = f"TG-{tg_id}"
+                try:
+                    user = get_user(user_id)
+                    if not user:
+                        expires = datetime.now() + timedelta(hours=2)
+                        user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
                         save_user(user)
                         rem = 2.0
                         is_cooldown = False
                         wait_str = ""
-                else:
-                    is_cooldown = False
-                    wait_str = ""
-
-        except Exception as e:
-            bot.reply_to(message, f"خطأ: {e}")
-            return
-
-        page_link = f"{API_URL}/user/{user_id}"
-        if is_cooldown:
-            markup = InlineKeyboardMarkup(row_width=1)
-            markup.add(InlineKeyboardButton("🌐 فتح صفحتي", url=page_link))
-            bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك يا {message.from_user.first_name}\n\nID: <code>{user_id}</code>\nباقي انتظار: <b>{wait_str}</b>", parse_mode='HTML', reply_markup=markup)
-        else:
-            markup = InlineKeyboardMarkup(row_width=2)
-            for f in get_allowed_files(user):
-                markup.add(InlineKeyboardButton(f"📦 {f}", callback_data=f"dl|{f}|{user_id}"))
-            markup.add(InlineKeyboardButton("🌐 فتح صفحتي", url=page_link))
-            bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>", parse_mode='HTML', reply_markup=markup)
-
-    @bot.callback_query_handler(func=lambda call: True)
-    def handle_callback(call):
-        try:
-            _, filename, user_id = call.data.split("|")
-            bot.answer_callback_query(call.id, f"جاري تجهيز {filename}")
-            user = get_user(user_id)
-            if not user or get_remaining_hours(user) <= 0:
-                bot.send_message(call.message.chat.id, "❌ انتهى وقتك")
-                return
-            bot.send_message(call.message.chat.id, f"⏳ جاري تجهيز {filename}...")
-            if filename == "File.npvt":
-                gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
-                r = requests.get(gdrive_url, stream=True, timeout=60)
-                content = r.content
-            else:
-                file_path = os.path.join(FOLDER, filename)
-                if not os.path.exists(file_path):
-                    bot.send_message(call.message.chat.id, f"❌ الملف غير موجود: {filename}")
+                    else:
+                        rem = get_remaining_hours(user)
+                        if rem <= 0:
+                            exp_date = parse_expire(user.get("expires_at"))
+                            hours_since = (datetime.now() - exp_date).total_seconds() / 3600
+                            if hours_since < 24:
+                                is_cooldown = True
+                                wait_str = format_hm(24 - hours_since)
+                            else:
+                                new_exp = datetime.now() + timedelta(hours=2)
+                                user["expires_at"] = new_exp.strftime("%Y-%m-%d %H:%M:%S")
+                                user["status"] = "active"
+                                save_user(user)
+                                rem = 2.0
+                                is_cooldown = False
+                                wait_str = ""
+                        else:
+                            is_cooldown = False
+                            wait_str = ""
+                except Exception as e:
+                    bot.reply_to(message, f"خطأ: {e}")
                     return
-                with open(file_path, 'rb') as f:
-                    content = f.read()
-            tmp_path = f"/tmp/{filename}"
-            with open(tmp_path, 'wb') as f:
-                f.write(content)
-            with open(tmp_path, 'rb') as f:
-                bot.send_document(call.message.chat.id, f, caption=f"✅ {filename}")
-        except Exception as e:
-            bot.send_message(call.message.chat.id, f"❌ خطأ: {e}")
+                page_link = f"{API_URL}/user/{user_id}"
+                markup = InlineKeyboardMarkup()
+                markup.add(InlineKeyboardButton("🌐 فتح صفحتي الخاصة", url=page_link))
+                if is_cooldown:
+                    bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك يا {message.from_user.first_name}\n\nID: <code>{user_id}</code>\nباقي انتظار: <b>{wait_str}</b>\n\nتقدر تفتح صفحتك تشوف العد التنازلي", parse_mode='HTML', reply_markup=markup)
+                else:
+                    bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>\n\nاضغط الزر تحت باش تفتح صفحتك وتحمل", parse_mode='HTML', reply_markup=markup)
 
-    bot.infinity_polling()
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"Bot crashed: {e} - restarting in 10s")
+            threading.Event().wait(10)
+
+def keep_bot_alive():
+    while True:
+        try:
+            t = threading.Thread(target=run_bot, daemon=True)
+            t.start()
+            t.join()
+        except:
+            pass
+        threading.Event().wait(5)
+
+def keep_server_alive():
+    while True:
+        try:
+            requests.get(f"{API_URL}/", timeout=10)
+        except:
+            pass
+        threading.Event().wait(120)
 
 if BOT_TOKEN:
-    threading.Thread(target=run_bot, daemon=True).start()
+    threading.Thread(target=keep_bot_alive, daemon=True).start()
+    threading.Thread(target=keep_server_alive, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", 10000)))
