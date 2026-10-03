@@ -27,7 +27,7 @@ ENABLE_SHORTENER = False
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
-FILES = ["File.ssc", "File.npvt", "File.nm"]
+FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
 
 def parse_expire(s):
     if not s:
