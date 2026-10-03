@@ -58,7 +58,8 @@ def get_allowed_files(user):
     af = user.get("allowed_files")
     if not af or not isinstance(af, list):
         return FILES
-    return [f for f in af if f in FILES]
+    # نرتب حسب FILES الأصلية باش كودلار ما يتلخبطش
+    return [f for f in FILES if f in af]
 
 def get_remaining_hours(user):
     if not user or not user.get("expires_at"):
