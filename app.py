@@ -279,7 +279,7 @@ def admin_panel():
     except Exception as e:
         return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
 
-# --- بوت فقط صفحة ---
+# --- البوت مصلح من خطأ 409 ---
 def run_bot():
     while True:
         try:
@@ -287,6 +287,7 @@ def run_bot():
                 print("BOT_TOKEN missing")
                 return
             bot = telebot.TeleBot(BOT_TOKEN)
+            bot.delete_webhook(drop_pending_updates=True)
             print("Bot started - page only mode")
 
             @bot.message_handler(commands=['start'])
@@ -332,32 +333,13 @@ def run_bot():
                 else:
                     bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>\n\nاضغط الزر تحت باش تفتح صفحتك وتحمل", parse_mode='HTML', reply_markup=markup)
 
-            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"Bot crashed: {e} - restarting in 10s")
             threading.Event().wait(10)
 
-def keep_bot_alive():
-    while True:
-        try:
-            t = threading.Thread(target=run_bot, daemon=True)
-            t.start()
-            t.join()
-        except:
-            pass
-        threading.Event().wait(5)
-
-def keep_server_alive():
-    while True:
-        try:
-            requests.get(f"{API_URL}/", timeout=10)
-        except:
-            pass
-        threading.Event().wait(120)
-
 if BOT_TOKEN:
-    threading.Thread(target=keep_bot_alive, daemon=True).start()
-    threading.Thread(target=keep_server_alive, daemon=True).start()
+    threading.Thread(target=run_bot, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", 10000)))
