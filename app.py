@@ -211,11 +211,10 @@ def go_file(filename):
         if not user.get("can_download", True):
             return "Download disabled", 403
 
-        import time, random
-# نضيف وقت + رقم عشوائي باش كل ضغطة = رابط جديد عند exe.io
-unique = f"{int(time.time())}_{random.randint(1000,999999)}"
-direct = f"{request.host_url}download/{filename}?user_id={user_id}&_u={unique}"
-
+          import time, random
+  ts = int(time.time())
+  rnd = random.randint(1000, 999999)
+  unique = f"{ts}_{rnd}"
         short = shorten_url(direct)
         
         # هنا الفرق: لو فشل = ما ينزلش مباشر، يطلع خطأ
