@@ -22,7 +22,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
-# === الربح شغال ===
+# === الربح - يتحكم من Render ===
 ENABLE_SHORTENER = os.getenv("ENABLE_SHORTENER", "False").lower() == "true"
 SHORTENER_API = os.getenv("SHORTENER_API")
 SHORTENER_KEY = os.getenv("SHORTENER_KEY")
@@ -60,7 +60,6 @@ def get_allowed_files(user):
     af = user.get("allowed_files")
     if not af or not isinstance(af, list):
         return FILES
-    # نرتب حسب FILES الأصلية باش كودلار ما يتلخبطش
     return [f for f in FILES if f in af]
 
 def get_remaining_hours(user):
@@ -88,6 +87,18 @@ def get_user(user_id):
     except:
         return None
 
+# === دالة الاختصار ===
+def shorten_url(long_url):
+    if not ENABLE_SHORTENER or not SHORTENER_KEY or not SHORTENER_API:
+        return long_url
+    try:
+        r = requests.get(SHORTENER_API, params={"api": SHORTENER_KEY, "url": long_url}, timeout=10)
+        data = r.json()
+        return data.get("shortenedUrl") or data.get("shortened_url") or data.get("short") or long_url
+    except Exception as e:
+        print(f"shortener error: {e}")
+        return long_url
+
 @app.route('/')
 def index():
     return "OK - Server Alive", 200
@@ -102,6 +113,7 @@ def check():
         user = get_user(user_id)
         allowed = get_allowed_files(user) if user else FILES
         base_url = request.host_url
+        # كودلار يبقى مباشر بلا ربح
         links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
         if not user:
             expires = now + timedelta(hours=2)
@@ -125,33 +137,6 @@ def check():
         return jsonify({"status": "active", "links": links, "files": allowed, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
-
-@app.route('/download/<filename>', methods=['GET'])
-def download(filename):
-    if filename not in FILES:
-        return "File not allowed", 403
-    user_id = request.args.get('user_id')
-    user = get_user(user_id)
-    if not user:
-        return "User not found", 403
-    if filename not in get_allowed_files(user):
-        return "Not allowed for you", 403
-    if not user.get("can_download", True):
-        return "Download disabled by admin", 403
-    if get_remaining_hours(user) <= 0:
-        return "Subscription ended", 403
-    try:
-        if filename == "File.npvt":
-            gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
-            r = requests.get(gdrive_url, stream=True, timeout=60)
-            return send_file(io.BytesIO(r.content), as_attachment=True, download_name=filename)
-        else:
-            path = os.path.join(FOLDER, filename)
-            if not os.path.exists(path):
-                return f"File {filename} not found on server", 404
-            return send_file(path, as_attachment=True)
-    except Exception as e:
-        return f"Download error: {e}", 500
 
 @app.route('/user/<user_id>')
 def user_page(user_id):
@@ -180,9 +165,9 @@ def user_page(user_id):
             banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2 style='margin:0;'>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p></div>"
         cards = ""
         for f in allowed:
-            dl_link = f"{request.host_url}download/{f}?user_id={user_id}"
+            go_link = f"{request.host_url}go/{f}?user_id={user_id}"
             if can_dl:
-                btn = f"<a href='{dl_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل مباشر</a>"
+                btn = f"<a href='{go_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل {f} 💰</a>"
             else:
                 btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
             cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
@@ -190,6 +175,48 @@ def user_page(user_id):
         <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
     except Exception as e:
         return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
+
+# === الرابط الوسيط للربح - قبل الداونلود مباشرة ===
+@app.route('/go/<filename>')
+def go_file(filename):
+    user_id = request.args.get('user_id')
+    if filename not in FILES:
+        return "File not allowed", 403
+    user = get_user(user_id)
+    if not user or get_remaining_hours(user) <= 0:
+        return "Subscription ended", 403
+    if not user.get("can_download", True):
+        return "Download disabled", 403
+    direct = f"{request.host_url}download/{filename}?user_id={user_id}"
+    short = shorten_url(direct) if ENABLE_SHORTENER else direct
+    return redirect(short)
+
+@app.route('/download/<filename>', methods=['GET'])
+def download(filename):
+    if filename not in FILES:
+        return "File not allowed", 403
+    user_id = request.args.get('user_id')
+    user = get_user(user_id)
+    if not user:
+        return "User not found", 403
+    if filename not in get_allowed_files(user):
+        return "Not allowed for you", 403
+    if not user.get("can_download", True):
+        return "Download disabled by admin", 403
+    if get_remaining_hours(user) <= 0:
+        return "Subscription ended", 403
+    try:
+        if filename == "File.npvt":
+            gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
+            r = requests.get(gdrive_url, stream=True, timeout=60)
+            return send_file(io.BytesIO(r.content), as_attachment=True, download_name=filename)
+        else:
+            path = os.path.join(FOLDER, filename)
+            if not os.path.exists(path):
+                return f"File {filename} not found on server", 404
+            return send_file(path, as_attachment=True)
+    except Exception as e:
+        return f"Download error: {e}", 500
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
@@ -282,7 +309,6 @@ def admin_panel():
     except Exception as e:
         return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
 
-# --- البوت مصلح من خطأ 409 ---
 def run_bot():
     while True:
         try:
@@ -292,7 +318,6 @@ def run_bot():
             bot = telebot.TeleBot(BOT_TOKEN)
             bot.delete_webhook(drop_pending_updates=True)
             print("Bot started - page only mode")
-
             @bot.message_handler(commands=['start'])
             def handle_start(message):
                 tg_id = str(message.from_user.id)
@@ -332,10 +357,9 @@ def run_bot():
                 markup = InlineKeyboardMarkup()
                 markup.add(InlineKeyboardButton("🌐 فتح صفحتي الخاصة", url=page_link))
                 if is_cooldown:
-                    bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك يا {message.from_user.first_name}\n\nID: <code>{user_id}</code>\nباقي انتظار: <b>{wait_str}</b>\n\nتقدر تفتح صفحتك تشوف العد التنازلي", parse_mode='HTML', reply_markup=markup)
+                    bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك يا {message.from_user.first_name}\n\nID: <code>{user_id}</code>\nباقي انتظار: <b>{wait_str}</b>", parse_mode='HTML', reply_markup=markup)
                 else:
                     bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>\n\nاضغط الزر تحت باش تفتح صفحتك وتحمل", parse_mode='HTML', reply_markup=markup)
-
             bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"Bot crashed: {e} - restarting in 10s")
