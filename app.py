@@ -22,8 +22,10 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
-# === الربح مطفي ===
-ENABLE_SHORTENER = False
+# === الربح شغال ===
+ ENABLE_SHORTENER = os.getenv("ENABLE_SHORTENER", "False").lower() == "true"
+SHORTENER_API = os.getenv("SHORTENER_API")
+SHORTENER_KEY = os.getenv("SHORTENER_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
