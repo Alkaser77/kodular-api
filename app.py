@@ -199,42 +199,30 @@ def user_page(user_id):
 
 # === الرابط الوسيط للربح - إجباري ===
 @app.route('/go/<filename>')
+@app.route('/go/<filename>')
 def go_file(filename):
     try:
         user_id = request.args.get('user_id')
         if filename not in FILES:
             return "File not allowed", 403
-            
         user = get_user(user_id)
         if not user or get_remaining_hours(user) <= 0:
             return "Subscription ended", 403
-        if not user.get("can_download", True):
-            return "Download disabled", 403
 
-          import time, random
-  ts = int(time.time())
-  rnd = random.randint(1000, 999999)
-  unique = f"{ts}_{rnd}"
+        import time, random
+        ts = int(time.time())
+        rnd = random.randint(10000, 999999)
+        unique = f"{ts}_{rnd}"
+        direct = f"{request.host_url}download/{filename}?user_id={user_id}&v={unique}"
+        
         short = shorten_url(direct)
-        
-        # هنا الفرق: لو فشل = ما ينزلش مباشر، يطلع خطأ
-        if not short:
-            return f"""
-            <html dir='rtl'><body style='font-family:Tahoma;text-align:center;padding:40px;background:#fff3cd'>
-            <h1 style='color:#856404'>⚠️ رابط الإعلان ما تجهزش</h1>
-            <p>exe.io ما رجعش رابط - حاول مرة ثانية</p>
-            <p style='font-size:12px'>DIRECT: {direct}</p>
-            <a href="/user/{user_id}" style="background:#007bff;color:white;padding:15px 30px;border-radius:10px;text-decoration:none;display:inline-block;margin-top:20px">🔙 رجوع وحاول مرة ثانية</a>
-            </body></html>
-            """, 500
-        
-        # إجباري: يوديك لصفحة الإعلان
-        return redirect(short)
-        
+        if short:
+            return redirect(short)
+        return redirect(direct)
     except Exception as e:
         import traceback
         print(traceback.format_exc())
-        return f"<pre>{traceback.format_exc()}</pre>", 500
+        return f"<pre>{e}</pre>", 500
         
 @app.route('/download/<filename>', methods=['GET'])
 def download(filename):
