@@ -91,29 +91,34 @@ def get_user(user_id):
 # === دالة الاختصار - إجبارية ===
 def shorten_url(long_url):
     if not ENABLE_SHORTENER:
-        print("SHORTENER DISABLED")
-        return None
-    api_raw = (SHORTENER_API or "https://exe.io/api").strip()
-    key = (SHORTENER_KEY or "").strip()
-    if not key and "api=" not in api_raw:
-        print("SHORTENER_KEY EMPTY")
+        print("ENABLE_SHORTENER=False")
         return None
     try:
-        if "api=" in api_raw:
-            final_url = f"{api_raw}&url={urllib.parse.quote(long_url, safe='')}"
-        else:
-            final_url = f"{api_raw}?api={key}&url={urllib.parse.quote(long_url, safe='')}"
-
-        print(f"CALLING: {final_url[:200]}")
-        r = requests.get(final_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-        print(f"EXE.IO STATUS {r.status_code} BODY: {r.text[:500]}")
-        data = r.json()
-        short = data.get("shortenedUrl") or data.get("shortened_url") or data.get("short") or data.get("url")
-        if short and short.startswith("http"):
-            return short.replace("\\/", "/")
+        import urllib.parse
+        api_raw = (SHORTENER_API or "https://exe.io/api").strip()
+        key = (SHORTENER_KEY or "").strip()
+        
+        # إعادة محاولة 3 مرات
+        for i in range(3):
+            try:
+                if "api=" in api_raw:
+                    final_url = f"{api_raw}&url={urllib.parse.quote(long_url, safe='')}"
+                else:
+                    final_url = f"{api_raw}?api={key}&url={urllib.parse.quote(long_url, safe='')}"
+                
+                r = requests.get(final_url, timeout=15, headers={"User-Agent":"Mozilla/5.0"})
+                print(f"TRY {i+1} - Status {r.status_code} - {r.text[:200]}")
+                
+                data = r.json()
+                short = data.get("shortenedUrl") or data.get("shortened_url")
+                if short and "exe.io" in short:
+                    return short.replace("\\/", "/")
+            except Exception as e:
+                print(f"TRY {i+1} FAIL: {e}")
+                continue
         return None
     except Exception as e:
-        print(f"shortener error: {e}")
+        print(f"SHORT FINAL FAIL: {e}")
         return None
 
 @app.route('/')
@@ -196,35 +201,37 @@ def user_page(user_id):
 @app.route('/go/<filename>')
 def go_file(filename):
     try:
-        import traceback
-        user_id = request.args.get('user_id') or "test"
-        
-        # مؤقتا شلنا فحص المستخدم باش نعرف هل المشكلة منه أو من الاختصار
-        # لو اشتغل بدون فحص، نرجع الفحص بعدين
-        print(f"GO SIMPLE: file={filename} user={user_id}")
-        
+        user_id = request.args.get('user_id')
+        if filename not in FILES:
+            return "File not allowed", 403
+            
+        user = get_user(user_id)
+        if not user or get_remaining_hours(user) <= 0:
+            return "Subscription ended", 403
+        if not user.get("can_download", True):
+            return "Download disabled", 403
+
         direct = f"{request.host_url}download/{filename}?user_id={user_id}"
-        print(f"DIRECT={direct}")
-        
         short = shorten_url(direct)
-        print(f"SHORT={short}")
         
-        if short:
-            print(f"REDIRECTING TO {short}")
-            return redirect(short)
-        else:
+        # هنا الفرق: لو فشل = ما ينزلش مباشر، يطلع خطأ
+        if not short:
             return f"""
-            <html><body style='padding:20px;font-family:Tahoma'>
-            <h2>فشل الاختصار لكن الكود ما طاحش</h2>
-            <p>Direct: {direct}</p>
-            <p>ENABLE={ENABLE_SHORTENER} API={SHORTENER_API}</p>
+            <html dir='rtl'><body style='font-family:Tahoma;text-align:center;padding:40px;background:#fff3cd'>
+            <h1 style='color:#856404'>⚠️ رابط الإعلان ما تجهزش</h1>
+            <p>exe.io ما رجعش رابط - حاول مرة ثانية</p>
+            <p style='font-size:12px'>DIRECT: {direct}</p>
+            <a href="/user/{user_id}" style="background:#007bff;color:white;padding:15px 30px;border-radius:10px;text-decoration:none;display:inline-block;margin-top:20px">🔙 رجوع وحاول مرة ثانية</a>
             </body></html>
             """, 500
-            
+        
+        # إجباري: يوديك لصفحة الإعلان
+        return redirect(short)
+        
     except Exception as e:
-        tb = traceback.format_exc()
-        print(f"GO CRASH: {tb}")
-        return f"<html><body><h1>DEBUG ERROR</h1><pre>{tb}</pre></body></html>", 500
+        import traceback
+        print(traceback.format_exc())
+        return f"<pre>{traceback.format_exc()}</pre>", 500
         
 @app.route('/download/<filename>', methods=['GET'])
 def download(filename):
