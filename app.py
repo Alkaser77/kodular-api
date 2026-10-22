@@ -11,6 +11,7 @@ import io
 import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import urllib.parse
 
 app = Flask(__name__)
 CORS(app)
@@ -24,8 +25,8 @@ ADMIN_KEY = "admin123"
 
 # === الربح - يتحكم من Render ===
 ENABLE_SHORTENER = os.getenv("ENABLE_SHORTENER", "False").lower() == "true"
-SHORTENER_API = os.getenv("SHORTENER_API")
-SHORTENER_KEY = os.getenv("SHORTENER_KEY")
+SHORTENER_API = os.getenv("SHORTENER_API", "https://exe.io/api")
+SHORTENER_KEY = os.getenv("SHORTENER_KEY", "").strip()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
@@ -87,17 +88,33 @@ def get_user(user_id):
     except:
         return None
 
-# === دالة الاختصار ===
+# === دالة الاختصار - إجبارية ===
 def shorten_url(long_url):
-    if not ENABLE_SHORTENER or not SHORTENER_KEY or not SHORTENER_API:
-        return long_url
+    if not ENABLE_SHORTENER:
+        print("SHORTENER DISABLED")
+        return None
+    api_raw = (SHORTENER_API or "https://exe.io/api").strip()
+    key = (SHORTENER_KEY or "").strip()
+    if not key and "api=" not in api_raw:
+        print("SHORTENER_KEY EMPTY")
+        return None
     try:
-        r = requests.get(SHORTENER_API, params={"api": SHORTENER_KEY, "url": long_url}, timeout=10)
+        if "api=" in api_raw:
+            final_url = f"{api_raw}&url={urllib.parse.quote(long_url, safe='')}"
+        else:
+            final_url = f"{api_raw}?api={key}&url={urllib.parse.quote(long_url, safe='')}"
+
+        print(f"CALLING: {final_url[:200]}")
+        r = requests.get(final_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        print(f"EXE.IO STATUS {r.status_code} BODY: {r.text[:500]}")
         data = r.json()
-        return data.get("shortenedUrl") or data.get("shortened_url") or data.get("short") or long_url
+        short = data.get("shortenedUrl") or data.get("shortened_url") or data.get("short") or data.get("url")
+        if short and short.startswith("http"):
+            return short.replace("\\/", "/")
+        return None
     except Exception as e:
         print(f"shortener error: {e}")
-        return long_url
+        return None
 
 @app.route('/')
 def index():
@@ -113,7 +130,6 @@ def check():
         user = get_user(user_id)
         allowed = get_allowed_files(user) if user else FILES
         base_url = request.host_url
-        # كودلار يبقى مباشر بلا ربح
         links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
         if not user:
             expires = now + timedelta(hours=2)
@@ -176,7 +192,7 @@ def user_page(user_id):
     except Exception as e:
         return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
 
-# === الرابط الوسيط للربح - قبل الداونلود مباشرة ===
+# === الرابط الوسيط للربح - إجباري ===
 @app.route('/go/<filename>')
 def go_file(filename):
     user_id = request.args.get('user_id')
@@ -184,11 +200,31 @@ def go_file(filename):
         return "File not allowed", 403
     user = get_user(user_id)
     if not user or get_remaining_hours(user) <= 0:
-        return "Subscription ended", 403
+        return "<h2 style='text-align:center;margin-top:100px;color:red;'>⛔ انتهى اشتراكك</h2>", 403
     if not user.get("can_download", True):
-        return "Download disabled", 403
+        return "<h2 style='text-align:center;margin-top:100px;color:red;'>⛔ التحميل موقوف من الادمن</h2>", 403
+    
+    if not ENABLE_SHORTENER:
+        return f"""
+        <html dir='rtl'><body style='font-family:Tahoma;text-align:center;padding:30px;'>
+        <h2 style='color:orange;'>⚠️ الربح مطفي</h2><p>فعل ENABLE_SHORTENER=True في Render</p>
+        <a href='/user/{user_id}'>رجوع</a></body></html>
+        """, 500
+
     direct = f"{request.host_url}download/{filename}?user_id={user_id}"
-    short = shorten_url(direct) if ENABLE_SHORTENER else direct
+    short = shorten_url(direct)
+    
+    if not short:
+        return f"""
+        <html dir='rtl'><body style='font-family:Tahoma;text-align:center;padding:30px;background:#f8f9fa;'>
+        <div style='background:white;padding:20px;border-radius:15px;max-width:500px;margin:auto;border:1px solid #ddd;'>
+            <h2 style='color:#dc3545;'>❌ فشل انشاء رابط الاعلان</h2>
+            <p>exe.io ما رجعش رابط - تأكد من التوكن في Render Logs</p>
+            <p style='font-size:12px;background:#eee;padding:10px;border-radius:8px;direction:ltr;'>API={SHORTENER_API}<br>KEY={SHORTENER_KEY[:8]}...</p>
+            <a href='/user/{user_id}' style='background:#007bff;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;'>🔙 رجوع</a>
+        </div></body></html>
+        """, 500
+    
     return redirect(short)
 
 @app.route('/download/<filename>', methods=['GET'])
@@ -217,6 +253,12 @@ def download(filename):
             return send_file(path, as_attachment=True)
     except Exception as e:
         return f"Download error: {e}", 500
+
+@app.route('/test-short')
+def test_short():
+    direct = f"{request.host_url}download/{FILES[0]}?user_id=test"
+    short = shorten_url(direct)
+    return f"ENABLE={ENABLE_SHORTENER}<br>API={SHORTENER_API}<br>KEY={SHORTENER_KEY[:8]}...<br>Direct={direct}<br>Short={short}<br>Status={'SUCCESS ✅' if short else 'FAILED ❌ - شوف Render Logs'}"
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
