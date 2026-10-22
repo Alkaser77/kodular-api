@@ -195,38 +195,37 @@ def user_page(user_id):
 # === الرابط الوسيط للربح - إجباري ===
 @app.route('/go/<filename>')
 def go_file(filename):
-    user_id = request.args.get('user_id')
-    if filename not in FILES:
-        return "File not allowed", 403
-    user = get_user(user_id)
-    if not user or get_remaining_hours(user) <= 0:
-        return "<h2 style='text-align:center;margin-top:100px;color:red;'>⛔ انتهى اشتراكك</h2>", 403
-    if not user.get("can_download", True):
-        return "<h2 style='text-align:center;margin-top:100px;color:red;'>⛔ التحميل موقوف من الادمن</h2>", 403
-    
-    if not ENABLE_SHORTENER:
-        return f"""
-        <html dir='rtl'><body style='font-family:Tahoma;text-align:center;padding:30px;'>
-        <h2 style='color:orange;'>⚠️ الربح مطفي</h2><p>فعل ENABLE_SHORTENER=True في Render</p>
-        <a href='/user/{user_id}'>رجوع</a></body></html>
-        """, 500
-
-    direct = f"{request.host_url}download/{filename}?user_id={user_id}"
-    short = shorten_url(direct)
-    
-    if not short:
-        return f"""
-        <html dir='rtl'><body style='font-family:Tahoma;text-align:center;padding:30px;background:#f8f9fa;'>
-        <div style='background:white;padding:20px;border-radius:15px;max-width:500px;margin:auto;border:1px solid #ddd;'>
-            <h2 style='color:#dc3545;'>❌ فشل انشاء رابط الاعلان</h2>
-            <p>exe.io ما رجعش رابط - تأكد من التوكن في Render Logs</p>
-            <p style='font-size:12px;background:#eee;padding:10px;border-radius:8px;direction:ltr;'>API={SHORTENER_API}<br>KEY={SHORTENER_KEY[:8]}...</p>
-            <a href='/user/{user_id}' style='background:#007bff;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;'>🔙 رجوع</a>
-        </div></body></html>
-        """, 500
-    
-    return redirect(short)
-
+    try:
+        import traceback
+        user_id = request.args.get('user_id') or "test"
+        
+        # مؤقتا شلنا فحص المستخدم باش نعرف هل المشكلة منه أو من الاختصار
+        # لو اشتغل بدون فحص، نرجع الفحص بعدين
+        print(f"GO SIMPLE: file={filename} user={user_id}")
+        
+        direct = f"{request.host_url}download/{filename}?user_id={user_id}"
+        print(f"DIRECT={direct}")
+        
+        short = shorten_url(direct)
+        print(f"SHORT={short}")
+        
+        if short:
+            print(f"REDIRECTING TO {short}")
+            return redirect(short)
+        else:
+            return f"""
+            <html><body style='padding:20px;font-family:Tahoma'>
+            <h2>فشل الاختصار لكن الكود ما طاحش</h2>
+            <p>Direct: {direct}</p>
+            <p>ENABLE={ENABLE_SHORTENER} API={SHORTENER_API}</p>
+            </body></html>
+            """, 500
+            
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"GO CRASH: {tb}")
+        return f"<html><body><h1>DEBUG ERROR</h1><pre>{tb}</pre></body></html>", 500
+        
 @app.route('/download/<filename>', methods=['GET'])
 def download(filename):
     if filename not in FILES:
