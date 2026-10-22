@@ -95,10 +95,9 @@ def shorten_url(long_url):
         return None
     try:
         import urllib.parse
-        api_raw = (SHORTENER_API or "https://exe.io/api").strip()
+        api_raw = (SHORTENER_API or "https://shrtfly.com/api").strip()
         key = (SHORTENER_KEY or "").strip()
         
-        # إعادة محاولة 3 مرات
         for i in range(3):
             try:
                 if "api=" in api_raw:
@@ -107,12 +106,20 @@ def shorten_url(long_url):
                     final_url = f"{api_raw}?api={key}&url={urllib.parse.quote(long_url, safe='')}"
                 
                 r = requests.get(final_url, timeout=15, headers={"User-Agent":"Mozilla/5.0"})
-                print(f"TRY {i+1} - Status {r.status_code} - {r.text[:200]}")
+                print(f"TRY {i+1} - Status {r.status_code} - {r.text[:300]}")
                 
-                data = r.json()
-                short = data.get("shortenedUrl") or data.get("shortened_url")
-                if short and "exe.io" in short:
-                    return short.replace("\\/", "/")
+                # ShrtFly يرجع JSON
+                try:
+                    data = r.json()
+                    short = data.get("shortenedUrl") or data.get("shortened_url") or data.get("shortUrl")
+                except:
+                    short = r.text.strip()
+
+                if short:
+                    short = short.replace("\\/", "/").replace('"','').strip()
+                    # نقبل أي رابط مختصر (shrtfly, exe, cuty, إلخ)
+                    if "http" in short:
+                        return short
             except Exception as e:
                 print(f"TRY {i+1} FAIL: {e}")
                 continue
@@ -198,7 +205,6 @@ def user_page(user_id):
         return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
 
 # === الرابط الوسيط للربح - إجباري ===
-@app.route('/go/<filename>')
 @app.route('/go/<filename>')
 def go_file(filename):
     try:
