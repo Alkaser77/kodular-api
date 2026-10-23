@@ -22,13 +22,26 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
-# === Monetag - تم التركيب ===
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
 MONETAG_AD_CODE = '<script src="https://quge5.com/88/tag.min.js" data-zone="300661" async data-cfasync="false"></script>'
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
 FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
+
+# === مهم لـ Monetag - يخدم sw.js من الروت ===
+@app.route('/sw.js')
+def serve_sw():
+    try:
+        # يدور عليه في الروت
+        if os.path.exists("sw.js"):
+            return send_file("sw.js", mimetype='application/javascript')
+        # لو حطيته في مجلد files
+        if os.path.exists(os.path.join(FOLDER, "sw.js")):
+            return send_file(os.path.join(FOLDER, "sw.js"), mimetype='application/javascript')
+        return "sw.js not found - upload file to root", 404
+    except Exception as e:
+        return f"error {e}", 500
 
 def parse_expire(s):
     if not s:
@@ -88,7 +101,7 @@ def get_user(user_id):
 
 @app.route('/')
 def index():
-    return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}<meta charset='UTF-8'></head><body>OK - Server Alive - Monetag Zone 300661 Active</body></html>", 200
+    return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}<meta charset='UTF-8'></head><body>OK - Monetag 300661 + sw.js Ready</body></html>", 200
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -129,9 +142,9 @@ def user_page(user_id):
     try:
         user = get_user(user_id)
         if not user:
-            return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}</head><body><h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2></body></html>", 404
+            return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}</head><body><h2>المستخدم غير موجود</h2></body></html>", 404
         if not user.get("page_enabled", True):
-            return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}</head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2></body></html>", 403
+            return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}</head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة</h2></body></html>", 403
         rem = get_remaining_hours(user)
         is_expired = rem <= 0
         wait_str = ""
@@ -146,16 +159,16 @@ def user_page(user_id):
         allowed = get_allowed_files(user)
         can_dl = False if is_expired else user.get("can_download", True)
         if is_expired:
-            banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3 style='margin:0;'>⏳ انتهى اشتراكك</h3><p style='margin:5px 0;'>عليك الانتظار: <b style='font-size:22px;'>{wait_str}</b></p><small>ID: {user_id}</small></div>"
+            banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3>⏳ انتهى اشتراكك</h3><p>عليك الانتظار: <b>{wait_str}</b></p></div>"
         else:
-            banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2 style='margin:0;'>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p style='margin:5px 0 0 0;'>متبقي: {format_hm(rem)}</p></div>"
+            banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p>متبقي: {format_hm(rem)}</p></div>"
         cards = ""
         for f in allowed:
             go_link = f"{request.host_url}go/{f}?user_id={user_id}"
             if can_dl:
                 btn = f"<a href='{go_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل {f}</a>"
             else:
-                btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
+                btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 معطل</span>"
             cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
         return f"""<html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
         <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
@@ -176,15 +189,13 @@ def go_file(filename):
         <html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}
         <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
         <title>جاري تحضير التحميل...</title>
-        <style>body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:30px}} .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:auto;border:1px solid #334155}} .timer{{font-size:50px;color:#22c55e;margin:20px;font-weight:bold}} .btn{{background:#22c55e;color:white;padding:16px 35px;border-radius:12px;text-decoration:none;display:inline-block;font-size:20px;margin-top:20px;font-weight:bold}} .ads{{margin:20px 0;min-height:100px}}</style>
+        <style>body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:30px}} .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:auto;border:1px solid #334155}} .timer{{font-size:50px;color:#22c55e;margin:20px;font-weight:bold}} .btn{{background:#22c55e;color:white;padding:16px 35px;border-radius:12px;text-decoration:none;display:inline-block;font-size:20px;margin-top:20px;font-weight:bold}}</style>
         <script>let c=5;function t(){{let el=document.getElementById('tm'); if(!el) return; el.innerHTML=c; if(c<=0){{document.getElementById('dl').style.display='inline-block'; document.getElementById('wt').innerHTML='جاهز للتحميل!';}} else {{c--; setTimeout(t,1000);}}}} window.onload=t;</script>
         </head><body><div class="box">
         <h2>📦 {filename}</h2>
-        <p id="wt">جاري تجهيز الرابط... الإعلانات تدعم الخدمة مجاناً</p>
+        <p id="wt">جاري تجهيز الرابط...</p>
         <div class="timer" id="tm">5</div>
-        <div class="ads"></div>
         <a id="dl" href="{direct}" style="display:none;" class="btn">⬇️ تحميل الآن</a>
-        <p style="font-size:11px;color:#64748b;margin-top:20px;">ID: {user_id}<br>كل زيارة = ربح USDT</p>
         </div></body></html>
         """
         return html
@@ -215,7 +226,7 @@ def download(filename):
         else:
             path = os.path.join(FOLDER, filename)
             if not os.path.exists(path):
-                return f"File {filename} not found on server", 404
+                return f"File {filename} not found", 404
             return send_file(path, as_attachment=True)
     except Exception as e:
         return f"Download error: {e}", 500
@@ -292,7 +303,7 @@ def admin_panel():
         all_users = query.execute().data
         html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
         <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
-        </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - Monetag Active 300661</h2>{msg}
+        </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
         <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
         <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
         <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
@@ -319,7 +330,7 @@ def run_bot():
                 return
             bot = telebot.TeleBot(BOT_TOKEN)
             bot.delete_webhook(drop_pending_updates=True)
-            print("Bot started - Monetag 300661")
+            print("Bot started")
             @bot.message_handler(commands=['start'])
             def handle_start(message):
                 tg_id = str(message.from_user.id)
@@ -359,12 +370,12 @@ def run_bot():
                 markup = InlineKeyboardMarkup()
                 markup.add(InlineKeyboardButton("🌐 فتح صفحتي الخاصة", url=page_link))
                 if is_cooldown:
-                    bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك يا {message.from_user.first_name}\n\nID: <code>{user_id}</code>\nباقي انتظار: <b>{wait_str}</b>", parse_mode='HTML', reply_markup=markup)
+                    bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك\nID: <code>{user_id}</code>\nباقي: <b>{wait_str}</b>", parse_mode='HTML', reply_markup=markup)
                 else:
-                    bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\n\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>\n\nاضغط الزر تحت باش تفتح صفحتك وتحمل", parse_mode='HTML', reply_markup=markup)
+                    bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>", parse_mode='HTML', reply_markup=markup)
             bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
         except Exception as e:
-            print(f"Bot crashed: {e} - restarting in 10s")
+            print(f"Bot crashed: {e}")
             threading.Event().wait(10)
 
 if BOT_TOKEN:
