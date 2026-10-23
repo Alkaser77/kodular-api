@@ -23,20 +23,18 @@ API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
-MONETAG_AD_CODE = '<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>'
+# تم تصليح علامات التنصيص هنا
+MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
 FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
 
-# === مهم لـ Monetag - يخدم sw.js من الروت ===
 @app.route('/sw.js')
 def serve_sw():
     try:
-        # يدور عليه في الروت
         if os.path.exists("sw.js"):
             return send_file("sw.js", mimetype='application/javascript')
-        # لو حطيته في مجلد files
         if os.path.exists(os.path.join(FOLDER, "sw.js")):
             return send_file(os.path.join(FOLDER, "sw.js"), mimetype='application/javascript')
         return "sw.js not found - upload file to root", 404
