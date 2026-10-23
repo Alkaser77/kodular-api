@@ -23,8 +23,7 @@ API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
-# تم تصليح علامات التنصيص هنا
-MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100760',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
+MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
@@ -37,185 +36,237 @@ def serve_sw():
             return send_file("sw.js", mimetype='application/javascript')
         if os.path.exists(os.path.join(FOLDER, "sw.js")):
             return send_file(os.path.join(FOLDER, "sw.js"), mimetype='application/javascript')
-        return "sw.js not found - upload file to root", 404
+        return "sw.js not found", 404
     except Exception as e:
         return f"error {e}", 500
 
 def parse_expire(s):
-    if not s:
-        return datetime.now()
+    if not s: return datetime.now()
     try:
         cleaned = s.replace('T', ' ').split('.')[0]
         return datetime.strptime(cleaned, "%Y-%m-%d %H:%M:%S")
     except:
-        try:
-            return datetime.fromisoformat(s.replace('Z', ''))
-        except:
-            return datetime.now()
+        try: return datetime.fromisoformat(s.replace('Z', ''))
+        except: return datetime.now()
 
 def format_hm(hours_float):
-    if hours_float <= 0:
-        return "0:00"
+    if hours_float <= 0: return "0:00"
     days = int(hours_float // 24)
     h = int(hours_float % 24)
     m = int((hours_float - (days*24 + h)) * 60)
-    if days > 0:
-        return f"{days} days {h}:{m:02d}"
-    else:
-        return f"{h}:{m:02d}"
+    if days > 0: return f"{days} days {h}:{m:02d}"
+    else: return f"{h}:{m:02d}"
 
 def get_allowed_files(user):
-    if not user:
-        return FILES
+    if not user: return FILES
     af = user.get("allowed_files")
-    if not af or not isinstance(af, list):
-        return FILES
+    if not af or not isinstance(af, list): return FILES
     return [f for f in FILES if f in af]
 
 def get_remaining_hours(user):
-    if not user or not user.get("expires_at"):
-        return 0
+    if not user or not user.get("expires_at"): return 0
     try:
         expires = parse_expire(user.get("expires_at"))
         diff = (expires - datetime.now()).total_seconds() / 3600
         return max(0, diff)
-    except:
-        return 0
+    except: return 0
 
 def save_user(user):
-    try:
-        supabase.table("users").upsert(user).execute()
-    except Exception as e:
-        print(f"save error {e}")
+    try: supabase.table("users").upsert(user).execute()
+    except: pass
 
 def get_user(user_id):
     try:
         res = supabase.table("users").select("*").eq("user_id", user_id).execute()
-        if res.data:
-            return res.data[0]
+        if res.data: return res.data[0]
         return None
-    except:
-        return None
+    except: return None
 
 @app.route('/')
 def index():
-    return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}<meta charset='UTF-8'></head><body>OK - Monetag 300661 + sw.js Ready</body></html>", 200
+    return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body>OK - OnClick Same Page</body></html>", 200
 
 @app.route('/check', methods=['GET'])
 def check():
     user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify({"error": "user_id missing"}), 400
-    try:
-        now = datetime.now()
-        user = get_user(user_id)
-        allowed = get_allowed_files(user) if user else FILES
-        base_url = request.host_url
-        links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
-        if not user:
-            expires = now + timedelta(hours=2)
-            user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
+    if not user_id: return jsonify({"error": "user_id missing"}), 400
+    now = datetime.now()
+    user = get_user(user_id)
+    allowed = get_allowed_files(user) if user else FILES
+    base_url = request.host_url
+    links = [f"{base_url}download/{f}?user_id={user_id}" for f in allowed]
+    if not user:
+        expires = now + timedelta(hours=2)
+        user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
+        save_user(user)
+        return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
+    remaining = get_remaining_hours(user)
+    if remaining <= 0:
+        last_expire = parse_expire(user.get("expires_at"))
+        hours_since_expire = (now - last_expire).total_seconds() / 3600
+        if hours_since_expire >= 24:
+            new_expire = now + timedelta(hours=2)
+            user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
+            user["status"] = "active"
             save_user(user)
             return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
-        remaining = get_remaining_hours(user)
-        if remaining <= 0:
-            last_expire = parse_expire(user.get("expires_at"))
-            hours_since_expire = (now - last_expire).total_seconds() / 3600
-            if hours_since_expire >= 24:
-                new_expire = now + timedelta(hours=2)
-                user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S")
-                user["status"] = "active"
-                save_user(user)
-                return jsonify({"status": "active", "links": links, "files": allowed, "hours": "2:00", "hours_float": 2.0})
-            else:
-                remaining_cooldown = max(0, 24 - hours_since_expire)
-                save_user(user)
-                return jsonify({"status": "cooldown", "message": f"Wait {format_hm(remaining_cooldown)} hours", "hours": format_hm(remaining_cooldown), "hours_float": round(remaining_cooldown, 2), "links": [], "files": []})
-        return jsonify({"status": "active", "links": links, "files": allowed, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+        else:
+            remaining_cooldown = max(0, 24 - hours_since_expire)
+            return jsonify({"status": "cooldown", "hours": format_hm(remaining_cooldown), "hours_float": round(remaining_cooldown, 2), "links": [], "files": []})
+    return jsonify({"status": "active", "links": links, "files": allowed, "hours": format_hm(remaining), "hours_float": round(remaining, 2)})
 
 @app.route('/user/<user_id>')
 def user_page(user_id):
-    try:
-        user = get_user(user_id)
-        if not user:
-            return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}</head><body><h2>المستخدم غير موجود</h2></body></html>", 404
-        if not user.get("page_enabled", True):
-            return f"<html><head>{MONETAG_TAG}{MONETAG_AD_CODE}</head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة</h2></body></html>", 403
-        rem = get_remaining_hours(user)
-        is_expired = rem <= 0
-        wait_str = ""
-        if is_expired:
-            try:
-                exp_date = parse_expire(user.get("expires_at"))
-                hours_since = (datetime.now() - exp_date).total_seconds() / 3600
-                wait = max(0, 24 - hours_since)
-                wait_str = format_hm(wait)
-            except:
-                wait_str = "24:00"
-        allowed = get_allowed_files(user)
-        can_dl = False if is_expired else user.get("can_download", True)
-        if is_expired:
-            banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3>⏳ انتهى اشتراكك</h3><p>عليك الانتظار: <b>{wait_str}</b></p></div>"
+    user = get_user(user_id)
+    if not user:
+        return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body><h2>المستخدم غير موجود</h2></body></html>", 404
+    if not user.get("page_enabled", True):
+        return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة</h2></body></html>", 403
+    rem = get_remaining_hours(user)
+    is_expired = rem <= 0
+    wait_str = ""
+    if is_expired:
+        try:
+            exp_date = parse_expire(user.get("expires_at"))
+            hours_since = (datetime.now() - exp_date).total_seconds() / 3600
+            wait = max(0, 24 - hours_since)
+            wait_str = format_hm(wait)
+        except: wait_str = "24:00"
+    allowed = get_allowed_files(user)
+    can_dl = False if is_expired else user.get("can_download", True)
+    if is_expired:
+        banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3>⏳ انتهى اشتراكك</h3><p>عليك الانتظار: <b>{wait_str}</b></p></div>"
+    else:
+        banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p>متبقي: {format_hm(rem)}</p></div>"
+    cards = ""
+    for f in allowed:
+        go_link = f"{request.host_url}go/{f}?user_id={user_id}"
+        if can_dl:
+            btn = f"<a href='{go_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل {f}</a>"
         else:
-            banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p>متبقي: {format_hm(rem)}</p></div>"
-        cards = ""
-        for f in allowed:
-            go_link = f"{request.host_url}go/{f}?user_id={user_id}"
-            if can_dl:
-                btn = f"<a href='{go_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل {f}</a>"
-            else:
-                btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 معطل</span>"
-            cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
-        return f"""<html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
-        <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
-    except Exception as e:
-        return f"<h2>خطأ</h2><pre>{e}</pre>", 500
+            btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 معطل</span>"
+        cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
+    return f"""<html dir="rtl"><head>{MONETAG_TAG}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
+    <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
 
 @app.route('/go/<filename>')
 def go_file(filename):
-    try:
-        user_id = request.args.get('user_id')
-        if filename not in FILES:
-            return "File not allowed", 403
-        user = get_user(user_id)
-        if not user or get_remaining_hours(user) <= 0:
-            return "Subscription ended", 403
-        direct = f"{request.host_url}download/{filename}?user_id={user_id}"
-        html = f"""
-        <html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}
-        <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>جاري تحضير التحميل...</title>
-        <style>body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:30px}} .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:auto;border:1px solid #334155}} .timer{{font-size:50px;color:#22c55e;margin:20px;font-weight:bold}} .btn{{background:#22c55e;color:white;padding:16px 35px;border-radius:12px;text-decoration:none;display:inline-block;font-size:20px;margin-top:20px;font-weight:bold}}</style>
-        <script>let c=5;function t(){{let el=document.getElementById('tm'); if(!el) return; el.innerHTML=c; if(c<=0){{document.getElementById('dl').style.display='inline-block'; document.getElementById('wt').innerHTML='جاهز للتحميل!';}} else {{c--; setTimeout(t,1000);}}}} window.onload=t;</script>
-        </head><body><div class="box">
-        <h2>📦 {filename}</h2>
-        <p id="wt">جاري تجهيز الرابط...</p>
-        <div class="timer" id="tm">5</div>
-        <a id="dl" href="{direct}" style="display:none;" class="btn">⬇️ تحميل الآن</a>
-        </div></body></html>
-        """
-        return html
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return f"<pre>{e}</pre>", 500
+    user_id = request.args.get('user_id')
+    if filename not in FILES: return "File not allowed", 403
+    user = get_user(user_id)
+    if not user or get_remaining_hours(user) <= 0: return "Subscription ended", 403
+    direct = f"{request.host_url}download/{filename}?user_id={user_id}"
+    # نفس الصفحة + زر إغلاق
+    return f"""
+    <html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>تحميل {filename}</title>
+    <style>
+      body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px;margin:0;overflow-x:hidden}}
+      .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155;position:relative;z-index:9999}}
+      .timer{{font-size:70px;color:#22c55e;margin:15px;font-weight:bold}}
+      .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;text-decoration:none;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px;box-shadow:0 4px 20px #22c55e55}}
+      .btn2{{background:#3b82f6;color:white;padding:14px 30px;border-radius:12px;text-decoration:none;display:none;font-size:18px;font-weight:bold;margin-top:15px;cursor:pointer;border:none}}
+      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 20px;border-radius:25px;position:fixed;top:15px;right:15px;z-index:2147483647;cursor:pointer;display:none;font-weight:bold;box-shadow:0 4px 15px #0008;animation:pop 0.3s}}
+      @keyframes pop{{0%{{transform:scale(0)}}100%{{transform:scale(1)}}}}
+      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:2147483646;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
+      .overlay p{{color:white;font-size:18px;margin-bottom:20px}}
+      .info{{background:#334155;padding:12px;border-radius:8px;font-size:13px;margin-top:20px;color:#94a3b8;line-height:1.6}}
+    </style>
+    </head><body>
+    <div id="adOverlay" class="overlay">
+      <p>📢 شاهد الإعلان لدعم الموقع - سيختفي تلقائيا</p>
+      <div style="color:#22c55e;font-size:50px" id="overlayTimer">5</div>
+      <button onclick="closeAdAndDownload()" style="background:#22c55e;color:white;border:none;padding:15px 35px;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:20px;display:none" id="continueBtn">✕ إغلاق الإعلان ومتابعة التحميل</button>
+    </div>
+
+    <button id="closeBtn" class="close-ad" onclick="closeAdAndDownload()">✕ إغلاق الإعلان</button>
+    
+    <div class="box">
+      <h2>📦 {filename}</h2>
+      <p id="wt">جاري تجهيز الرابط... انتظر 10 ثواني</p>
+      <div class="timer" id="tm">10</div>
+      
+      <button id="dl" class="btn" onclick="showAd()">⬇️ تحميل الآن</button>
+      <a id="realDl" href="{direct}" style="display:none"></a>
+      
+      <div class="info">
+        لما تضغط تحميل، سيظهر الإعلان في <b>نفس الصفحة</b><br>
+        المشاهدة تنحسب وتدعم الموقع ❤️<br>
+        اضغط <b>إغلاق الإعلان</b> للمتابعة
+      </div>
+    </div>
+
+    <script>
+      let c=10;
+      let adShown = false;
+      let downloadUrl = "{direct}";
+      
+      function t(){{
+        let el=document.getElementById('tm');
+        if(!el) return;
+        el.innerHTML=c;
+        if(c<=0){{
+          document.getElementById('dl').style.display='inline-block';
+          document.getElementById('wt').innerHTML='✅ الرابط جاهز - اضغط تحميل';
+        }} else {{ c--; setTimeout(t,1000); }}
+      }}
+
+      function showAd(){{
+        // يظهر طبقة الإعلان في نفس الصفحة
+        document.getElementById('adOverlay').style.display='flex';
+        document.getElementById('closeBtn').style.display='block';
+        adShown = true;
         
+        // Monetag OnClick سيشتغل تلقائي هنا لأنه كليك - ينحسب مشاهدة
+        // نبدأ عد تنازلي للإغلاق
+        let oc=5;
+        let oi=setInterval(function(){{
+          document.getElementById('overlayTimer').innerHTML=oc;
+          document.getElementById('continueBtn').style.display='block';
+          if(oc<=0){{ clearInterval(oi); }}
+          oc--;
+        }},1000);
+        
+        // بعد 3 ثواني يخلي زر المتابعة يظهر
+        setTimeout(function(){{
+          document.getElementById('continueBtn').style.display='block';
+        }},3000);
+      }}
+
+      function closeAdAndDownload(){{
+        // يخفي كل شي مزعج
+        document.getElementById('adOverlay').style.display='none';
+        document.getElementById('closeBtn').style.display='none';
+        
+        // يمسح أي طبقات إعلانات Monetag اللي غطت الصفحة
+        document.querySelectorAll('div[style*="position: fixed"],div[style*="position:fixed"]').forEach(function(e){{
+          if(!e.closest('.box') && !e.closest('.overlay') && e.id!=='closeBtn' && e.id!=='adOverlay'){{ 
+            // ما نمسحش صندوقنا، نمسح بس إعلانات Monetag
+            if(e.innerHTML.length > 100){{ // تأكد انه إعلان
+              e.style.display='none';
+            }}
+          }}
+        }});
+        
+        // يبدأ التحميل في نفس الصفحة - ما يفتحش تبويب جديد
+        window.location.href = downloadUrl;
+      }}
+
+      window.onload=t;
+    </script>
+    </body></html>
+    """
+
 @app.route('/download/<filename>', methods=['GET'])
 def download(filename):
-    if filename not in FILES:
-        return "File not allowed", 403
+    if filename not in FILES: return "File not allowed", 403
     user_id = request.args.get('user_id')
     user = get_user(user_id)
-    if not user:
-        return "User not found", 403
-    if filename not in get_allowed_files(user):
-        return "Not allowed for you", 403
-    if not user.get("can_download", True):
-        return "Download disabled by admin", 403
-    if get_remaining_hours(user) <= 0:
-        return "Subscription ended", 403
+    if not user: return "User not found", 403
+    if filename not in get_allowed_files(user): return "Not allowed for you", 403
+    if not user.get("can_download", True): return "Download disabled by admin", 403
+    if get_remaining_hours(user) <= 0: return "Subscription ended", 403
     try:
         if filename == "File.npvt":
             gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
@@ -223,154 +274,114 @@ def download(filename):
             return send_file(io.BytesIO(r.content), as_attachment=True, download_name=filename)
         else:
             path = os.path.join(FOLDER, filename)
-            if not os.path.exists(path):
-                return f"File {filename} not found", 404
+            if not os.path.exists(path): return f"File {filename} not found", 404
             return send_file(path, as_attachment=True)
     except Exception as e:
         return f"Download error: {e}", 500
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
-    try:
-        key = request.args.get('key')
-        if key!= ADMIN_KEY:
-            return "<h3>key=admin123</h3>", 401
-        now = datetime.now()
-        msg = "<h3 style='color:green;text-align:center;'>✅ تم</h3>" if request.args.get('msg') == 'done' else ""
-        action = request.args.get('action')
-        uid = request.args.get('user_id')
-        if action == 'set_perm' and uid:
-            files = [f for f in request.args.get('files', '').split(',') if f in FILES]
-            u = get_user(uid)
-            if u:
-                u["allowed_files"] = files
-                save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'toggle_page' and uid:
-            u = get_user(uid)
-            if u:
-                u["page_enabled"] = not u.get("page_enabled", True)
-                save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'toggle_dl' and uid:
-            u = get_user(uid)
-            if u:
-                u["can_download"] = not u.get("can_download", True)
-                save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'ban' and uid:
-            supabase.table("users").delete().eq("user_id", uid).execute()
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action == 'reset' and uid:
-            u = get_user(uid)
-            if u:
-                u["expires_at"] = (now + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
-                u["status"] = "active"
-                save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        if action in ['add', 'sub', 'add_all', 'sub_all']:
-            try:
-                days = float(request.args.get('days', 0) or 0)
-                hours = float(request.args.get('hours', 0) or 0)
-                total = days * 24 + hours
-            except:
-                total = 0
-            if action in ['add', 'sub']:
-                users_list = [get_user(uid)] if uid else []
+    key = request.args.get('key')
+    if key!= ADMIN_KEY: return "<h3>key=admin123</h3>", 401
+    now = datetime.now()
+    msg = "<h3 style='color:green;text-align:center;'>✅ تم</h3>" if request.args.get('msg') == 'done' else ""
+    action = request.args.get('action')
+    uid = request.args.get('user_id')
+    if action == 'set_perm' and uid:
+        files = [f for f in request.args.get('files', '').split(',') if f in FILES]
+        u = get_user(uid)
+        if u: u["allowed_files"] = files; save_user(u)
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    if action == 'toggle_page' and uid:
+        u = get_user(uid)
+        if u: u["page_enabled"] = not u.get("page_enabled", True); save_user(u)
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    if action == 'toggle_dl' and uid:
+        u = get_user(uid)
+        if u: u["can_download"] = not u.get("can_download", True); save_user(u)
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    if action == 'ban' and uid:
+        supabase.table("users").delete().eq("user_id", uid).execute()
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    if action == 'reset' and uid:
+        u = get_user(uid)
+        if u: u["expires_at"] = (now + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); u["status"] = "active"; save_user(u)
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    if action in ['add', 'sub', 'add_all', 'sub_all']:
+        try:
+            days = float(request.args.get('days', 0) or 0)
+            hours = float(request.args.get('hours', 0) or 0)
+            total = days * 24 + hours
+        except: total = 0
+        if action in ['add', 'sub']: users_list = [get_user(uid)] if uid else []
+        else: users_list = supabase.table("users").select("*").execute().data
+        for u in users_list:
+            if not u: continue
+            cur = parse_expire(u.get("expires_at"))
+            if 'add' in action:
+                base = cur if cur > now else now
+                new = base + timedelta(hours=total)
             else:
-                users_list = supabase.table("users").select("*").execute().data
-            for u in users_list:
-                if not u:
-                    continue
-                cur = parse_expire(u.get("expires_at"))
-                if 'add' in action:
-                    base = cur if cur > now else now
-                    new = base + timedelta(hours=total)
-                else:
-                    new = cur - timedelta(hours=total)
-                    if new < now:
-                        new = now - timedelta(minutes=1)
-                u["expires_at"] = new.strftime("%Y-%m-%d %H:%M:%S")
-                u["status"] = "active" if new > now else "expired"
-                save_user(u)
-            return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
-        query = supabase.table("users").select("*").order("expires_at", desc=True)
-        search = request.args.get('search')
-        if search:
-            query = query.ilike("user_id", f"%{search}%")
-        all_users = query.execute().data
-        html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
-        <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}
-        </style><script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن</h2>{msg}
-        <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
-        <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
-        <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
-        <table><tr><th>المستخدم</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
-        for u in all_users:
-            rem = format_hm(get_remaining_hours(u))
-            allowed = get_allowed_files(u)
-            perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label><br>" for f in FILES])
-            perm += f"<button onclick=\"savePerm('{u['user_id']}')\" style='background:#6610f2;color:white;border:none;padding:4px 8px;border-radius:4px;margin-top:5px;width:100%;'>حفظ</button>"
-            page_btn = f"<a class='b {'on' if u.get('page_enabled',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_page&user_id={u['user_id']}'>{'مفعلة' if u.get('page_enabled',True) else 'موقوفة'}</a>"
-            dl_btn = f"<a class='b {'on' if u.get('can_download',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_dl&user_id={u['user_id']}'>{'مسموح' if u.get('can_download',True) else 'ممنوع'}</a>"
-            copy_btns = f"<div><code style='font-size:10px;'>{u['user_id']}</code><br><button class='b copy' onclick=\"copyId('{u['user_id']}')\">📋 نسخ</button><br><a href='/user/{u['user_id']}' target='_blank' class='b' style='background:#6f42c1;'>صفحته</a></div>"
-            html += f"<tr><td>{copy_btns}</td><td dir='ltr'><b>{rem}</b><br><small>{u.get('expires_at','')}</small></td><td>{perm}</td><td>{page_btn}</td><td>{dl_btn}</td><td><a class='b' style='background:#6c757d' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}'>تصفير</a><br><a class='b off' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a><hr><form method='get'><input type='hidden' name='key' value='{ADMIN_KEY}'><input type='hidden' name='user_id' value='{u['user_id']}'><input class='small-inp' type='number' name='days' value='0'><input class='small-inp' type='number' name='hours' value='24'><br><button class='b on' name='action' value='add'>+ اضافة</button><button class='b off' name='action' value='sub'>- تنقيص</button></form></td></tr>"
-        html += "</table></div></body></html>"
-        return html
-    except Exception as e:
-        return f"<h1>Admin Error</h1><pre>{e}</pre>", 500
+                new = cur - timedelta(hours=total)
+                if new < now: new = now - timedelta(minutes=1)
+            u["expires_at"] = new.strftime("%Y-%m-%d %H:%M:%S")
+            u["status"] = "active" if new > now else "expired"
+            save_user(u)
+        return redirect(f"/admin?key={ADMIN_KEY}&msg=done")
+    query = supabase.table("users").select("*").order("expires_at", desc=True)
+    search = request.args.get('search')
+    if search: query = query.ilike("user_id", f"%{search}%")
+    all_users = query.execute().data
+    html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
+    <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}</style>
+    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - OnClick نفس الصفحة</h2>{msg}
+    <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
+    <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
+    <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
+    <table><tr><th>المستخدم</th><th>الوقت</th><th>الملفات</th><th>الصفحة</th><th>التحميل</th><th>تحكم</th></tr>"""
+    for u in all_users:
+        rem = format_hm(get_remaining_hours(u))
+        allowed = get_allowed_files(u)
+        perm = "".join([f"<label><input type='checkbox' class='chk_{u['user_id']}' value='{f}' {'checked' if f in allowed else ''}> {f.split('.')[0]}</label><br>" for f in FILES])
+        perm += f"<button onclick=\"savePerm('{u['user_id']}')\" style='background:#6610f2;color:white;border:none;padding:4px 8px;border-radius:4px;margin-top:5px;width:100%;'>حفظ</button>"
+        page_btn = f"<a class='b {'on' if u.get('page_enabled',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_page&user_id={u['user_id']}'>{'مفعلة' if u.get('page_enabled',True) else 'موقوفة'}</a>"
+        dl_btn = f"<a class='b {'on' if u.get('can_download',True) else 'off'}' href='/admin?key={ADMIN_KEY}&action=toggle_dl&user_id={u['user_id']}'>{'مسموح' if u.get('can_download',True) else 'ممنوع'}</a>"
+        copy_btns = f"<div><code style='font-size:10px;'>{u['user_id']}</code><br><button class='b copy' onclick=\"copyId('{u['user_id']}')\">📋 نسخ</button><br><a href='/user/{u['user_id']}' target='_blank' class='b' style='background:#6f42c1;'>صفحته</a></div>"
+        html += f"<tr><td>{copy_btns}</td><td dir='ltr'><b>{rem}</b><br><small>{u.get('expires_at','')}</small></td><td>{perm}</td><td>{page_btn}</td><td>{dl_btn}</td><td><a class='b' style='background:#6c757d' href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}'>تصفير</a><br><a class='b off' href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}'>حذف</a><hr><form method='get'><input type='hidden' name='key' value='{ADMIN_KEY}'><input type='hidden' name='user_id' value='{u['user_id']}'><input class='small-inp' type='number' name='days' value='0'><input class='small-inp' type='number' name='hours' value='24'><br><button class='b on' name='action' value='add'>+ اضافة</button><button class='b off' name='action' value='sub'>- تنقيص</button></form></td></tr>"
+    html += "</table></div></body></html>"
+    return html
 
 def run_bot():
     while True:
         try:
-            if not BOT_TOKEN:
-                print("BOT_TOKEN missing")
-                return
+            if not BOT_TOKEN: return
             bot = telebot.TeleBot(BOT_TOKEN)
             bot.delete_webhook(drop_pending_updates=True)
-            print("Bot started")
             @bot.message_handler(commands=['start'])
             def handle_start(message):
                 tg_id = str(message.from_user.id)
                 user_id = f"TG-{tg_id}"
-                try:
-                    user = get_user(user_id)
-                    if not user:
-                        expires = datetime.now() + timedelta(hours=2)
-                        user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
-                        save_user(user)
-                        rem = 2.0
-                        is_cooldown = False
-                        wait_str = ""
-                    else:
-                        rem = get_remaining_hours(user)
-                        if rem <= 0:
-                            exp_date = parse_expire(user.get("expires_at"))
-                            hours_since = (datetime.now() - exp_date).total_seconds() / 3600
-                            if hours_since < 24:
-                                is_cooldown = True
-                                wait_str = format_hm(24 - hours_since)
-                            else:
-                                new_exp = datetime.now() + timedelta(hours=2)
-                                user["expires_at"] = new_exp.strftime("%Y-%m-%d %H:%M:%S")
-                                user["status"] = "active"
-                                save_user(user)
-                                rem = 2.0
-                                is_cooldown = False
-                                wait_str = ""
-                        else:
-                            is_cooldown = False
-                            wait_str = ""
-                except Exception as e:
-                    bot.reply_to(message, f"خطأ: {e}")
-                    return
+                user = get_user(user_id)
+                if not user:
+                    expires = datetime.now() + timedelta(hours=2)
+                    user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "allowed_files": FILES, "page_enabled": True, "can_download": True}
+                    save_user(user)
+                    rem = 2.0
+                else:
+                    rem = get_remaining_hours(user)
+                    if rem <= 0:
+                        exp_date = parse_expire(user.get("expires_at"))
+                        hours_since = (datetime.now() - exp_date).total_seconds() / 3600
+                        if hours_since >= 24:
+                            new_exp = datetime.now() + timedelta(hours=2)
+                            user["expires_at"] = new_exp.strftime("%Y-%m-%d %H:%M:%S")
+                            user["status"] = "active"
+                            save_user(user)
+                            rem = 2.0
                 page_link = f"{API_URL}/user/{user_id}"
                 markup = InlineKeyboardMarkup()
                 markup.add(InlineKeyboardButton("🌐 فتح صفحتي الخاصة", url=page_link))
-                if is_cooldown:
-                    bot.send_message(message.chat.id, f"⏳ انتهى اشتراكك\nID: <code>{user_id}</code>\nباقي: <b>{wait_str}</b>", parse_mode='HTML', reply_markup=markup)
-                else:
-                    bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>", parse_mode='HTML', reply_markup=markup)
+                bot.send_message(message.chat.id, f"مرحبا {message.from_user.first_name} 👋\nID: <code>{user_id}</code>\nمتبقي: <b>{format_hm(rem)}</b>", parse_mode='HTML', reply_markup=markup)
             bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"Bot crashed: {e}")
