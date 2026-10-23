@@ -156,60 +156,51 @@ def go_file(filename):
     <title>تحميل {filename}</title>
     <style>
       body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px;margin:0}}
-      .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155}}
+      .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155;position:relative;z-index:9999}}
       .timer{{font-size:70px;color:#22c55e;margin:15px;font-weight:bold}}
-      .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;text-decoration:none;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px}}
-      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:999999;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
-      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 25px;border-radius:25px;cursor:pointer;font-weight:bold;margin-top:20px;font-size:18px}}
-      .info{{background:#334155;padding:12px;border-radius:8px;font-size:13px;margin-top:20px;color:#94a3b8}}
+      .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px}}
+      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:#0f172a;z-index:2147483646;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
+      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 25px;border-radius:25px;cursor:pointer;font-weight:bold;font-size:18px;margin-top:20px}}
     </style>
     </head><body>
     <div id="adOverlay" class="overlay">
-      <h2 style="color:#22c55e">✅ تم فتح الإعلان في تبويب جديد</h2>
-      <p style="color:white;font-size:16px;line-height:1.6">سكر تبويب الإعلان <b>cdn.gggal.com</b> وارجع هنا<br>المشاهدة انحسبت وتدعم الموقع ❤️</p>
-      <div style="color:#22c55e;font-size:50px" id="overlayTimer">5</div>
-      <button onclick="closeAdAndDownload()" style="background:#22c55e;color:white;border:none;padding:15px 35px;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:20px" id="continueBtn">✕ إغلاق ومتابعة التحميل</button>
-      <p style="color:#64748b;font-size:12px;margin-top:15px">لو ما انفتحش الإعلان اضغط متابعة</p>
+      <h2 style="color:#22c55e">⏳ جاري فتح الإعلان...</h2>
+      <p>بعد مشاهدة الإعلان اضغط رجوع ↩️ ثم متابعة التحميل</p>
+      <button onclick="closeAdAndDownload()" class="close-ad" id="continueBtn">✕ إغلاق ومتابعة التحميل</button>
+      <p style="color:#64748b;font-size:12px;margin-top:20px">المشاهدة تنحسب حتى لو سكرت بسرعة ❤️</p>
     </div>
-    
     <div class="box">
       <h2>📦 {filename}</h2>
       <p id="wt">جاري تجهيز الرابط... انتظر 10 ثواني</p>
       <div class="timer" id="tm">10</div>
-      <button id="dl" class="btn" onclick="showAdAndOpen()">⬇️ تحميل الآن</button>
-      <div class="info">عند الضغط سيفتح الإعلان في تبويب جديد (تنحسب المشاهدة)<br>ارجع لهذه الصفحة واضغط <b>إغلاق ومتابعة</b> ليبدأ التحميل</div>
+      <button id="dl" class="btn" onclick="showAd()">⬇️ تحميل الآن</button>
     </div>
-
     <script>
       let c=10;
       let downloadUrl = "{direct}";
       function t(){{
         let el=document.getElementById('tm');
-        if(!el) return;
         el.innerHTML=c;
         if(c<=0){{
           document.getElementById('dl').style.display='inline-block';
-          document.getElementById('wt').innerHTML='✅ الرابط جاهز - اضغط تحميل';
+          document.getElementById('wt').innerHTML='✅ الرابط جاهز';
         }} else {{ c--; setTimeout(t,1000); }}
       }}
-      function showAdAndOpen(){{
-        // يوري طبقة الإغلاق في صفحتك قبل ما Monetag يخطف
+      function showAd(){{
+        // نوري طبقة الإغلاق أولا
         document.getElementById('adOverlay').style.display='flex';
-        // يفتح تبويب جديد باش Monetag ما يخطفش صفحتك
-        window.open('about:blank','_blank');
-        // هنا Monetag OnClick سيشتغل تلقائيا لأنه كليك - يفتح في التبويب الجديد
+        // نخلي زر المتابعة يبان بعد ثانيتين
         setTimeout(function(){{
-           document.getElementById('continueBtn').style.display='block';
-        }},1000);
+          document.getElementById('continueBtn').style.display='block';
+        }},2000);
+        // Monetag سيفتح تلقائيا بعد هذا الكليك - هذا اللي يخلي الإعلان ينحسب
       }}
       function closeAdAndDownload(){{
-        document.getElementById('adOverlay').style.display='none';
         window.location.href = downloadUrl;
       }}
       window.onload=t;
     </script>
     </body></html>
-    """
     """
 
 @app.route('/download/<filename>', methods=['GET'])
