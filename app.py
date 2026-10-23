@@ -155,29 +155,31 @@ def go_file(filename):
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>تحميل {filename}</title>
     <style>
-      body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px;margin:0;overflow-x:hidden}}
-      .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155;position:relative;z-index:9999}}
+      body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px;margin:0}}
+      .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155}}
       .timer{{font-size:70px;color:#22c55e;margin:15px;font-weight:bold}}
-      .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;text-decoration:none;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px;box-shadow:0 4px 20px #22c55e55}}
-      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 20px;border-radius:25px;position:fixed;top:15px;right:15px;z-index:2147483647;cursor:pointer;display:none;font-weight:bold;box-shadow:0 4px 15px #0008}}
-      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:2147483646;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
-      .overlay p{{color:white;font-size:18px;margin-bottom:20px}}
-      .info{{background:#334155;padding:12px;border-radius:8px;font-size:13px;margin-top:20px;color:#94a3b8;line-height:1.6}}
+      .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;text-decoration:none;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px}}
+      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:999999;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
+      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 25px;border-radius:25px;cursor:pointer;font-weight:bold;margin-top:20px;font-size:18px}}
+      .info{{background:#334155;padding:12px;border-radius:8px;font-size:13px;margin-top:20px;color:#94a3b8}}
     </style>
     </head><body>
     <div id="adOverlay" class="overlay">
-      <p>📢 الإعلان في نفس الصفحة - شاهد لدعم الموقع</p>
+      <h2 style="color:#22c55e">✅ تم فتح الإعلان في تبويب جديد</h2>
+      <p style="color:white;font-size:16px;line-height:1.6">سكر تبويب الإعلان <b>cdn.gggal.com</b> وارجع هنا<br>المشاهدة انحسبت وتدعم الموقع ❤️</p>
       <div style="color:#22c55e;font-size:50px" id="overlayTimer">5</div>
-      <button onclick="closeAdAndDownload()" style="background:#22c55e;color:white;border:none;padding:15px 35px;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:20px;display:none" id="continueBtn">✕ إغلاق الإعلان ومتابعة التحميل</button>
+      <button onclick="closeAdAndDownload()" style="background:#22c55e;color:white;border:none;padding:15px 35px;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:20px" id="continueBtn">✕ إغلاق ومتابعة التحميل</button>
+      <p style="color:#64748b;font-size:12px;margin-top:15px">لو ما انفتحش الإعلان اضغط متابعة</p>
     </div>
-    <button id="closeBtn" class="close-ad" onclick="closeAdAndDownload()">✕ إغلاق الإعلان</button>
+    
     <div class="box">
       <h2>📦 {filename}</h2>
       <p id="wt">جاري تجهيز الرابط... انتظر 10 ثواني</p>
       <div class="timer" id="tm">10</div>
-      <button id="dl" class="btn" onclick="showAd()">⬇️ تحميل الآن</button>
-      <div class="info">لما تضغط تحميل، سيظهر الإعلان في <b>نفس الصفحة</b><br>المشاهدة تنحسب وتدعم الموقع ❤️<br>اضغط <b>إغلاق الإعلان</b> للمتابعة</div>
+      <button id="dl" class="btn" onclick="showAdAndOpen()">⬇️ تحميل الآن</button>
+      <div class="info">عند الضغط سيفتح الإعلان في تبويب جديد (تنحسب المشاهدة)<br>ارجع لهذه الصفحة واضغط <b>إغلاق ومتابعة</b> ليبدأ التحميل</div>
     </div>
+
     <script>
       let c=10;
       let downloadUrl = "{direct}";
@@ -190,33 +192,24 @@ def go_file(filename):
           document.getElementById('wt').innerHTML='✅ الرابط جاهز - اضغط تحميل';
         }} else {{ c--; setTimeout(t,1000); }}
       }}
-      function showAd(){{
+      function showAdAndOpen(){{
+        // يوري طبقة الإغلاق في صفحتك قبل ما Monetag يخطف
         document.getElementById('adOverlay').style.display='flex';
-        document.getElementById('closeBtn').style.display='block';
-        let oc=5;
-        let oi=setInterval(function(){{
-          document.getElementById('overlayTimer').innerHTML=oc;
-          document.getElementById('continueBtn').style.display='block';
-          if(oc<=0){{ clearInterval(oi); }}
-          oc--;
-        }},1000);
+        // يفتح تبويب جديد باش Monetag ما يخطفش صفحتك
+        window.open('about:blank','_blank');
+        // هنا Monetag OnClick سيشتغل تلقائيا لأنه كليك - يفتح في التبويب الجديد
         setTimeout(function(){{
-          document.getElementById('continueBtn').style.display='block';
-        }},2000);
+           document.getElementById('continueBtn').style.display='block';
+        }},1000);
       }}
       function closeAdAndDownload(){{
         document.getElementById('adOverlay').style.display='none';
-        document.getElementById('closeBtn').style.display='none';
-        document.querySelectorAll('div[style*="position: fixed"],div[style*="position:fixed"]').forEach(function(e){{
-          if(!e.closest('.box') && !e.closest('.overlay') && e.id!=='closeBtn' && e.id!=='adOverlay'){{ 
-            if(e.innerHTML.length > 100){{ e.style.display='none'; }}
-          }}
-        }});
         window.location.href = downloadUrl;
       }}
       window.onload=t;
     </script>
     </body></html>
+    """
     """
 
 @app.route('/download/<filename>', methods=['GET'])
