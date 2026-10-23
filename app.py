@@ -24,8 +24,7 @@ ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
 # الصيغة الجديدة الصحيحة لـ Monetag Well-to-do tag - باش يتوثق
-MONETAG_AD_CODE = """<script src="https://al5sm.com/tag.min.js" data-zone="12100604" async data-cfasync="false"></script>"""
-
+MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
 FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
