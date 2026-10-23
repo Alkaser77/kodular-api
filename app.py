@@ -23,7 +23,9 @@ API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
-MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
+# تم التصليح - الصيغة الجديدة اللي يتعرف عليها Monetag باش يثبت Verification
+MONETAG_AD_CODE = """<script src="https://al5sm.com/tag.min.js" data-zone="12100604" async data-cfasync="false"></script>"""
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
 FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
@@ -83,7 +85,7 @@ def get_user(user_id):
 
 @app.route('/')
 def index():
-    return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body>OK - OnClick Same Page</body></html>", 200
+    return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body>OK - OnClick Same Page Fixed</body></html>", 200
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -145,6 +147,7 @@ def user_page(user_id):
         else:
             btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 معطل</span>"
         cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
+    # صفحة اليوزر نظيفة بدون إعلانات
     return f"""<html dir="rtl"><head>{MONETAG_TAG}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
     <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
 
@@ -155,7 +158,6 @@ def go_file(filename):
     user = get_user(user_id)
     if not user or get_remaining_hours(user) <= 0: return "Subscription ended", 403
     direct = f"{request.host_url}download/{filename}?user_id={user_id}"
-    # نفس الصفحة + زر إغلاق
     return f"""
     <html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -165,16 +167,14 @@ def go_file(filename):
       .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155;position:relative;z-index:9999}}
       .timer{{font-size:70px;color:#22c55e;margin:15px;font-weight:bold}}
       .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;text-decoration:none;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px;box-shadow:0 4px 20px #22c55e55}}
-      .btn2{{background:#3b82f6;color:white;padding:14px 30px;border-radius:12px;text-decoration:none;display:none;font-size:18px;font-weight:bold;margin-top:15px;cursor:pointer;border:none}}
-      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 20px;border-radius:25px;position:fixed;top:15px;right:15px;z-index:2147483647;cursor:pointer;display:none;font-weight:bold;box-shadow:0 4px 15px #0008;animation:pop 0.3s}}
-      @keyframes pop{{0%{{transform:scale(0)}}100%{{transform:scale(1)}}}}
-      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:2147483646;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
+      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 20px;border-radius:25px;position:fixed;top:15px;right:15px;z-index:2147483647;cursor:pointer;display:none;font-weight:bold;box-shadow:0 4px 15px #0008}}
+      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:2147483646;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
       .overlay p{{color:white;font-size:18px;margin-bottom:20px}}
       .info{{background:#334155;padding:12px;border-radius:8px;font-size:13px;margin-top:20px;color:#94a3b8;line-height:1.6}}
     </style>
     </head><body>
     <div id="adOverlay" class="overlay">
-      <p>📢 شاهد الإعلان لدعم الموقع - سيختفي تلقائيا</p>
+      <p>📢 الإعلان في نفس الصفحة - شاهد لدعم الموقع</p>
       <div style="color:#22c55e;font-size:50px" id="overlayTimer">5</div>
       <button onclick="closeAdAndDownload()" style="background:#22c55e;color:white;border:none;padding:15px 35px;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:20px;display:none" id="continueBtn">✕ إغلاق الإعلان ومتابعة التحميل</button>
     </div>
@@ -185,10 +185,7 @@ def go_file(filename):
       <h2>📦 {filename}</h2>
       <p id="wt">جاري تجهيز الرابط... انتظر 10 ثواني</p>
       <div class="timer" id="tm">10</div>
-      
       <button id="dl" class="btn" onclick="showAd()">⬇️ تحميل الآن</button>
-      <a id="realDl" href="{direct}" style="display:none"></a>
-      
       <div class="info">
         لما تضغط تحميل، سيظهر الإعلان في <b>نفس الصفحة</b><br>
         المشاهدة تنحسب وتدعم الموقع ❤️<br>
@@ -198,7 +195,6 @@ def go_file(filename):
 
     <script>
       let c=10;
-      let adShown = false;
       let downloadUrl = "{direct}";
       
       function t(){{
@@ -212,13 +208,8 @@ def go_file(filename):
       }}
 
       function showAd(){{
-        // يظهر طبقة الإعلان في نفس الصفحة
         document.getElementById('adOverlay').style.display='flex';
         document.getElementById('closeBtn').style.display='block';
-        adShown = true;
-        
-        // Monetag OnClick سيشتغل تلقائي هنا لأنه كليك - ينحسب مشاهدة
-        // نبدأ عد تنازلي للإغلاق
         let oc=5;
         let oi=setInterval(function(){{
           document.getElementById('overlayTimer').innerHTML=oc;
@@ -226,29 +217,19 @@ def go_file(filename):
           if(oc<=0){{ clearInterval(oi); }}
           oc--;
         }},1000);
-        
-        // بعد 3 ثواني يخلي زر المتابعة يظهر
         setTimeout(function(){{
           document.getElementById('continueBtn').style.display='block';
-        }},3000);
+        }},2000);
       }}
 
       function closeAdAndDownload(){{
-        // يخفي كل شي مزعج
         document.getElementById('adOverlay').style.display='none';
         document.getElementById('closeBtn').style.display='none';
-        
-        // يمسح أي طبقات إعلانات Monetag اللي غطت الصفحة
         document.querySelectorAll('div[style*="position: fixed"],div[style*="position:fixed"]').forEach(function(e){{
           if(!e.closest('.box') && !e.closest('.overlay') && e.id!=='closeBtn' && e.id!=='adOverlay'){{ 
-            // ما نمسحش صندوقنا، نمسح بس إعلانات Monetag
-            if(e.innerHTML.length > 100){{ // تأكد انه إعلان
-              e.style.display='none';
-            }}
+            if(e.innerHTML.length > 100){{ e.style.display='none'; }}
           }}
         }});
-        
-        // يبدأ التحميل في نفس الصفحة - ما يفتحش تبويب جديد
         window.location.href = downloadUrl;
       }}
 
@@ -333,7 +314,7 @@ def admin_panel():
     all_users = query.execute().data
     html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
     <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}</style>
-    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - OnClick نفس الصفحة</h2>{msg}
+    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - OnClick نفس الصفحة ✅</h2>{msg}
     <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
     <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
     <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
