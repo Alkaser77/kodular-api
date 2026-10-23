@@ -24,7 +24,7 @@ ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
 # تم تصليح علامات التنصيص هنا
-MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100732',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
+MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100760',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
