@@ -11,7 +11,6 @@ import io
 import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import urllib.parse
 
 app = Flask(__name__)
 CORS(app)
@@ -23,10 +22,12 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
-# === الربح - يتحكم من Render ===
-ENABLE_SHORTENER = os.getenv("ENABLE_SHORTENER", "False").lower() == "true"
-SHORTENER_API = os.getenv("SHORTENER_API", "https://exe.io/api")
-SHORTENER_KEY = os.getenv("SHORTENER_KEY", "").strip()
+# === Monetag ===
+MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
+# حط كود اعلانك هنا بعد ما يقبلوك
+MONETAG_AD_CODE = """
+<!-- مثلا: <script src='https://fpyf8.com/88/tag.min.js' data-zone='XXXXXX' async data-cfasync='false'></script> -->
+"""
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
@@ -88,49 +89,9 @@ def get_user(user_id):
     except:
         return None
 
-# === دالة الاختصار - إجبارية ===
-def shorten_url(long_url):
-    if not ENABLE_SHORTENER:
-        print("ENABLE_SHORTENER=False")
-        return None
-    try:
-        import urllib.parse
-        api_raw = (SHORTENER_API or "https://shrtfly.com/api").strip()
-        key = (SHORTENER_KEY or "").strip()
-        
-        for i in range(3):
-            try:
-                if "api=" in api_raw:
-                    final_url = f"{api_raw}&url={urllib.parse.quote(long_url, safe='')}"
-                else:
-                    final_url = f"{api_raw}?api={key}&url={urllib.parse.quote(long_url, safe='')}"
-                
-                r = requests.get(final_url, timeout=15, headers={"User-Agent":"Mozilla/5.0"})
-                print(f"TRY {i+1} - Status {r.status_code} - {r.text[:300]}")
-                
-                # ShrtFly يرجع JSON
-                try:
-                    data = r.json()
-                    short = data.get("shortenedUrl") or data.get("shortened_url") or data.get("shortUrl")
-                except:
-                    short = r.text.strip()
-
-                if short:
-                    short = short.replace("\\/", "/").replace('"','').strip()
-                    # نقبل أي رابط مختصر (shrtfly, exe, cuty, إلخ)
-                    if "http" in short:
-                        return short
-            except Exception as e:
-                print(f"TRY {i+1} FAIL: {e}")
-                continue
-        return None
-    except Exception as e:
-        print(f"SHORT FINAL FAIL: {e}")
-        return None
-
 @app.route('/')
 def index():
-    return "OK - Server Alive", 200
+    return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body>OK - Server Alive - Monetag Verified {MONETAG_AD_CODE}</body></html>", 200
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -171,9 +132,9 @@ def user_page(user_id):
     try:
         user = get_user(user_id)
         if not user:
-            return "<h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2>", 404
+            return f"<html><head>{MONETAG_TAG}</head><body><h2 style='text-align:center;margin-top:100px;'>المستخدم غير موجود</h2></body></html>", 404
         if not user.get("page_enabled", True):
-            return "<h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2>", 403
+            return f"<html><head>{MONETAG_TAG}</head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة من الادمن</h2></body></html>", 403
         rem = get_remaining_hours(user)
         is_expired = rem <= 0
         wait_str = ""
@@ -195,16 +156,15 @@ def user_page(user_id):
         for f in allowed:
             go_link = f"{request.host_url}go/{f}?user_id={user_id}"
             if can_dl:
-                btn = f"<a href='{go_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل {f} 💰</a>"
+                btn = f"<a href='{go_link}' style='background:#28a745;color:white;padding:12px;border-radius:8px;text-decoration:none;display:block;font-weight:bold;'>⬇️ تحميل {f}</a>"
             else:
                 btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 التحميل معطل</span>"
             cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
-        return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
+        return f"""<html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
         <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
     except Exception as e:
-        return f"<h2>خطأ في صفحة المستخدم</h2><pre>{e}</pre>", 500
+        return f"<h2>خطأ</h2><pre>{e}</pre>", 500
 
-# === الرابط الوسيط للربح - إجباري ===
 @app.route('/go/<filename>')
 def go_file(filename):
     try:
@@ -215,16 +175,24 @@ def go_file(filename):
         if not user or get_remaining_hours(user) <= 0:
             return "Subscription ended", 403
 
-        import time, random
-        ts = int(time.time())
-        rnd = random.randint(10000, 999999)
-        unique = f"{ts}_{rnd}"
-        direct = f"{request.host_url}download/{filename}?user_id={user_id}&v={unique}"
-        
-        short = shorten_url(direct)
-        if short:
-            return redirect(short)
-        return redirect(direct)
+        direct = f"{request.host_url}download/{filename}?user_id={user_id}"
+
+        html = f"""
+        <html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>جاري تحضير التحميل...</title>
+        <style>body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:30px}} .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:auto;border:1px solid #334155}} .timer{{font-size:50px;color:#22c55e;margin:20px;font-weight:bold}} .btn{{background:#22c55e;color:white;padding:16px 35px;border-radius:12px;text-decoration:none;display:inline-block;font-size:20px;margin-top:20px;font-weight:bold}} .ads{{margin:20px 0;background:#00000020;padding:10px;border-radius:10px}}</style>
+        <script>let c=5;function t(){{let el=document.getElementById('tm'); if(!el) return; el.innerHTML=c; if(c<=0){{document.getElementById('dl').style.display='inline-block'; document.getElementById('wt').innerHTML='جاهز للتحميل!';}} else {{c--; setTimeout(t,1000);}}}} window.onload=t;</script>
+        </head><body><div class="box">
+        <h2>📦 {filename}</h2>
+        <p id="wt">جاري تجهيز الرابط... الإعلانات تدعم استمرار الخدمة مجاناً</p>
+        <div class="timer" id="tm">5</div>
+        <div class="ads">-- إعلانات Monetag تظهر هنا --</div>
+        <a id="dl" href="{direct}" style="display:none;" class="btn">⬇️ تحميل الآن</a>
+        <p style="font-size:11px;color:#64748b;margin-top:20px;">ID: {user_id}<br>كل زيارة لهذه الصفحة = ربح USDT لك</p>
+        </div></body></html>
+        """
+        return html
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -256,12 +224,6 @@ def download(filename):
             return send_file(path, as_attachment=True)
     except Exception as e:
         return f"Download error: {e}", 500
-
-@app.route('/test-short')
-def test_short():
-    direct = f"{request.host_url}download/{FILES[0]}?user_id=test"
-    short = shorten_url(direct)
-    return f"ENABLE={ENABLE_SHORTENER}<br>API={SHORTENER_API}<br>KEY={SHORTENER_KEY[:8]}...<br>Direct={direct}<br>Short={short}<br>Status={'SUCCESS ✅' if short else 'FAILED ❌ - شوف Render Logs'}"
 
 @app.route('/admin', methods=['GET'])
 def admin_panel():
@@ -362,7 +324,7 @@ def run_bot():
                 return
             bot = telebot.TeleBot(BOT_TOKEN)
             bot.delete_webhook(drop_pending_updates=True)
-            print("Bot started - page only mode")
+            print("Bot started - Monetag only")
             @bot.message_handler(commands=['start'])
             def handle_start(message):
                 tg_id = str(message.from_user.id)
