@@ -23,7 +23,7 @@ API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
-MONETAG_AD_CODE = '<script src="https://quge5.com/88/tag.min.js" data-zone="300661" async data-cfasync="false"></script>'
+MONETAG_AD_CODE = '<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>'
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
