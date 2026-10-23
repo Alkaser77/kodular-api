@@ -23,7 +23,7 @@ API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
 
 MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
-# تم التصليح - الصيغة الجديدة اللي يتعرف عليها Monetag باش يثبت Verification
+# الصيغة الجديدة الصحيحة لـ Monetag Well-to-do tag - باش يتوثق
 MONETAG_AD_CODE = """<script src="https://al5sm.com/tag.min.js" data-zone="12100604" async data-cfasync="false"></script>"""
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -85,7 +85,11 @@ def get_user(user_id):
 
 @app.route('/')
 def index():
-    return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body>OK - OnClick Same Page Fixed</body></html>", 200
+    # هذا المهم باش Monetag يتوثق - لازم الزوز بعد <head> مباشرة
+    return f"""<html><head>{MONETAG_TAG}
+    {MONETAG_AD_CODE}
+    <meta charset="UTF-8"><title>Verified</title></head>
+    <body style="font-family:Tahoma;text-align:center;padding:50px;">OK - Monetag 12100604 Installed - Verification OK</body></html>""", 200
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -147,7 +151,7 @@ def user_page(user_id):
         else:
             btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 معطل</span>"
         cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
-    # صفحة اليوزر نظيفة بدون إعلانات
+    # صفحة اليوزر نظيفة بدون إعلانات مزعجة
     return f"""<html dir="rtl"><head>{MONETAG_TAG}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
     <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
 
@@ -178,25 +182,17 @@ def go_file(filename):
       <div style="color:#22c55e;font-size:50px" id="overlayTimer">5</div>
       <button onclick="closeAdAndDownload()" style="background:#22c55e;color:white;border:none;padding:15px 35px;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:20px;display:none" id="continueBtn">✕ إغلاق الإعلان ومتابعة التحميل</button>
     </div>
-
     <button id="closeBtn" class="close-ad" onclick="closeAdAndDownload()">✕ إغلاق الإعلان</button>
-    
     <div class="box">
       <h2>📦 {filename}</h2>
       <p id="wt">جاري تجهيز الرابط... انتظر 10 ثواني</p>
       <div class="timer" id="tm">10</div>
       <button id="dl" class="btn" onclick="showAd()">⬇️ تحميل الآن</button>
-      <div class="info">
-        لما تضغط تحميل، سيظهر الإعلان في <b>نفس الصفحة</b><br>
-        المشاهدة تنحسب وتدعم الموقع ❤️<br>
-        اضغط <b>إغلاق الإعلان</b> للمتابعة
-      </div>
+      <div class="info">لما تضغط تحميل، سيظهر الإعلان في <b>نفس الصفحة</b><br>المشاهدة تنحسب وتدعم الموقع ❤️<br>اضغط <b>إغلاق الإعلان</b> للمتابعة</div>
     </div>
-
     <script>
       let c=10;
       let downloadUrl = "{direct}";
-      
       function t(){{
         let el=document.getElementById('tm');
         if(!el) return;
@@ -206,7 +202,6 @@ def go_file(filename):
           document.getElementById('wt').innerHTML='✅ الرابط جاهز - اضغط تحميل';
         }} else {{ c--; setTimeout(t,1000); }}
       }}
-
       function showAd(){{
         document.getElementById('adOverlay').style.display='flex';
         document.getElementById('closeBtn').style.display='block';
@@ -221,7 +216,6 @@ def go_file(filename):
           document.getElementById('continueBtn').style.display='block';
         }},2000);
       }}
-
       function closeAdAndDownload(){{
         document.getElementById('adOverlay').style.display='none';
         document.getElementById('closeBtn').style.display='none';
@@ -232,7 +226,6 @@ def go_file(filename):
         }});
         window.location.href = downloadUrl;
       }}
-
       window.onload=t;
     </script>
     </body></html>
@@ -314,7 +307,7 @@ def admin_panel():
     all_users = query.execute().data
     html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
     <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}</style>
-    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - OnClick نفس الصفحة ✅</h2>{msg}
+    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - OnClick نفس الصفحة ✅ Verified</h2>{msg}
     <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
     <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
     <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
