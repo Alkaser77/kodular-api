@@ -30,17 +30,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
 FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
 
-@app.route('/sw.js')
-def serve_sw():
-    try:
-        if os.path.exists("sw.js"):
-            return send_file("sw.js", mimetype='application/javascript')
-        if os.path.exists(os.path.join(FOLDER, "sw.js")):
-            return send_file(os.path.join(FOLDER, "sw.js"), mimetype='application/javascript')
-        return "sw.js not found", 404
-    except Exception as e:
-        return f"error {e}", 500
-
 def parse_expire(s):
     if not s: return datetime.now()
     try:
