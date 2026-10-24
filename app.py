@@ -73,40 +73,39 @@ def get_bnb_address(user_index):
         return f"0xERROR_{str(e)[:40]}"
 
 def check_bnb_payment(bnb_address):
-    if not BSC_API_KEY or not bnb_address or bnb_address.startswith("0xERROR") or bnb_address.startswith("0xSET"):
-        return False, "missing_BSC_API_KEY"
+    if not bnb_address or bnb_address.startswith("0xERROR") or bnb_address.startswith("0xSET"):
+        return False, "bad_address"
     try:
-        # الرابط الجديد V2
-        url = f"https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx&contractaddress={USDT_BEP20}&address={bnb_address}&page=1&offset=10&sort=desc&apikey={BSC_API_KEY}"
-        resp = requests.get(url, timeout=20)
-        print(f"NEW API Response: {resp.text[:1000]}")
-        try:
-            r = resp.json()
-        except:
-            return False, f"not_json:{resp.text[:200]}"
-
-        # لو المفتاح غلط
-        if r.get("message") == "NOTOK" and "Invalid API Key" in str(r.get("result","")):
-            return False, f"Invalid API Key - use {BSC_API_KEY[:10]}..."
+        # نستخدم BSC Public RPC - مجاني
+        rpc_url = "https://bsc-dataseed.binance.org/"
         
-        # مافيش معاملات
-        if r.get("status") == "0" and "No transactions found" in r.get("message","") + str(r.get("result","")):
-            return False, "no_tx_yet"
-
-        result = r.get("result", [])
-        if isinstance(result, str):
-            return False, result
-
-        for tx in result:
-            try:
-                if tx.get("to","").lower() == bnb_address.lower():
-                    decimals = int(tx.get("tokenDecimal","18"))
-                    val = int(tx["value"]) / (10 ** decimals)
-                    if val >= 14.9:
-                        return True, tx.get("hash","")
-            except:
-                continue
-        return False, "not_paid_yet"
+        # 1. نحول العنوان لـ balanceOf call
+        # balanceOf(address) = 0x70a08231 + 32 bytes address
+        addr_clean = bnb_address.lower().replace("0x","")
+        data = "0x70a08231" + "0"*24 + addr_clean
+        
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [{"to": USDT_BEP20, "data": data}, "latest"],
+            "id": 1
+        }
+        
+        resp = requests.post(rpc_url, json=payload, timeout=15)
+        r = resp.json()
+        
+        if "result" in r:
+            balance_hex = r["result"]
+            balance_int = int(balance_hex, 16)
+            # USDT BEP20 has 18 decimals
+            balance_usdt = balance_int / (10**18)
+            print(f"Balance for {bnb_address}: {balance_usdt} USDT")
+            
+            if balance_usdt >= 14.9:  # 15 - fee
+                return True, f"balance_{balance_usdt}"
+        
+        return False, f"no_tx_yet_balance_0"
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
