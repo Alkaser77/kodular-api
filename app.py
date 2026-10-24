@@ -63,20 +63,33 @@ def get_bnb_address(user_index):
     except:
         return ROOT_WALLET
 
-def check_bnb_payment(bnb_address):
+def check_bnb_payment(bnb_address, test_mode=False):
     try:
         rpc_url = "https://bsc-dataseed.binance.org/"
-        addr_clean = bnb_address.lower().replace("0x","")
-        data = "0x70a08231" + "0"*24 + addr_clean
-        payload = {"jsonrpc":"2.0","method":"eth_call","params":[{"to":USDT_BEP20,"data":data},"latest"],"id":1}
-        resp = requests.post(rpc_url, json=payload, timeout=15)
-        r = resp.json()
-        balance_hex = r.get("result","0x0")
-        balance_int = 0 if not balance_hex or balance_hex == "0x" else int(balance_hex, 16)
-        balance_usdt = balance_int / 10**18
-        if balance_usdt >= 14.9:
-            return True, f"balance_{balance_usdt}"
-        return False, f"balance_{balance_usdt}"
+        addr_lower = bnb_address.lower()
+        
+        if test_mode:
+            # وضع التجريب - يشوف رصيد BNB الاصلي (تقدر تبعت 0.0001)
+            payload = {"jsonrpc":"2.0","method":"eth_getBalance","params":[bnb_address,"latest"],"id":1}
+            resp = requests.post(rpc_url, json=payload, timeout=15).json()
+            bal_wei = int(resp.get("result","0x0"), 16)
+            bal_bnb = bal_wei / 10**18
+            # لو عنده اكثر من 0.0001 BNB اعتبره دافع للتجريب
+            if bal_bnb >= 0.0001:
+                return True, f"test_bnb_balance_{bal_bnb}"
+            return False, f"test_bnb_balance_{bal_bnb}"
+        else:
+            # الوضع الحقيقي - يشوف USDT
+            addr_clean = bnb_address.lower().replace("0x","")
+            data = "0x70a08231" + "0"*24 + addr_clean
+            payload = {"jsonrpc":"2.0","method":"eth_call","params":[{"to":USDT_BEP20,"data":data},"latest"],"id":1}
+            resp = requests.post(rpc_url, json=payload, timeout=15).json()
+            balance_hex = resp.get("result","0x0")
+            balance_int = 0 if not balance_hex or balance_hex == "0x" else int(balance_hex, 16)
+            balance_usdt = balance_int / 10**18
+            if balance_usdt >= 14.9:
+                return True, f"balance_{balance_usdt}"
+            return False, f"balance_{balance_usdt}"
     except Exception as e:
         return False, str(e)
 
@@ -99,7 +112,10 @@ def pay_page(user_id):
 def verify_payment(user_id):
     user_hash = abs(hash(user_id)) % 2147483647
     bnb_addr = get_bnb_address(user_hash)
-    paid, info = check_bnb_payment(bnb_addr)
+    
+    is_test = "test" in user_id.lower()
+    paid, info = check_bnb_payment(bnb_addr, test_mode=is_test)
+
     if paid and supabase:
         try:
             existing = supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
@@ -108,7 +124,8 @@ def verify_payment(user_id):
                 supabase.table("subscriptions").update({"expire_at": new_expire.isoformat(), "is_paid": True, "bnb_addr": bnb_addr}).eq("user_id", user_id).execute()
             else:
                 supabase.table("subscriptions").insert({"user_id": user_id, "expire_at": new_expire.isoformat(), "is_paid": True, "bnb_addr": bnb_addr}).execute()
-        except: pass
+        except:
+            pass
     return jsonify({"paid": paid, "tx": info, "bnb_addr": bnb_addr})
 
 @app.route("/admin")
