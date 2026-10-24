@@ -73,7 +73,6 @@ def get_bnb_address(user_index):
         return f"0xERROR_{str(e)[:40]}"
 
 def check_bnb_payment(bnb_address):
-def check_bnb_payment(bnb_address):
     if not bnb_address or bnb_address.startswith("0xERROR") or bnb_address.startswith("0xSET"):
         return False, "bad_address"
     try:
