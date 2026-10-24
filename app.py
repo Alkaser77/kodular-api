@@ -74,22 +74,42 @@ def get_bnb_address(user_index):
 
 def check_bnb_payment(bnb_address):
     if not BSC_API_KEY or not bnb_address or bnb_address.startswith("0xERROR") or bnb_address.startswith("0xSET"):
-        return False, "config_error"
+        return False, "missing_BSC_API_KEY"
     try:
-        url = f"https://api.bscscan.com/api?module=account&action=tokentx&contractaddress={USDT_BEP20}&address={bnb_address}&page=1&offset=10&sort=desc&apikey={BSC_API_KEY}"
-        r = requests.get(url, timeout=15).json()
-        if r.get("status") != "1":
-            return False, "no_tx"
-        for tx in r.get("result", []):
+        # الرابط الجديد V2
+        url = f"https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx&contractaddress={USDT_BEP20}&address={bnb_address}&page=1&offset=10&sort=desc&apikey={BSC_API_KEY}"
+        resp = requests.get(url, timeout=20)
+        print(f"NEW API Response: {resp.text[:1000]}")
+        try:
+            r = resp.json()
+        except:
+            return False, f"not_json:{resp.text[:200]}"
+
+        # لو المفتاح غلط
+        if r.get("message") == "NOTOK" and "Invalid API Key" in str(r.get("result","")):
+            return False, f"Invalid API Key - use {BSC_API_KEY[:10]}..."
+        
+        # مافيش معاملات
+        if r.get("status") == "0" and "No transactions found" in r.get("message","") + str(r.get("result","")):
+            return False, "no_tx_yet"
+
+        result = r.get("result", [])
+        if isinstance(result, str):
+            return False, result
+
+        for tx in result:
             try:
-                if tx["to"].lower() == bnb_address.lower():
-                    val = int(tx["value"]) / (10 ** int(tx.get("tokenDecimal", "18")))
-                    if val >= PRICE_USDT - 0.1:
-                        return True, tx["hash"]
+                if tx.get("to","").lower() == bnb_address.lower():
+                    decimals = int(tx.get("tokenDecimal","18"))
+                    val = int(tx["value"]) / (10 ** decimals)
+                    if val >= 14.9:
+                        return True, tx.get("hash","")
             except:
                 continue
-        return False, "not_paid"
+        return False, "not_paid_yet"
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return False, str(e)
 
 def download_from_drive(file_id):
