@@ -112,31 +112,42 @@ def verify_payment(user_id):
     return jsonify({"paid": paid, "tx": info, "bnb_addr": bnb_addr})
 
 @app.route("/admin")
+@app.route("/admin")
 def admin_dashboard():
     key = request.args.get("key", "")
     if key != ADMIN_KEY:
         return "Unauthorized - add ?key=123456", 401
-    all_subs = supabase.table("subscriptions").select("*").order("created_at", desc=True).execute()
-    rows = ""
-    total = 0
-    count = 0
-    for sub in all_subs.data:
-        bnb_addr = sub.get("bnb_addr","")
-        if not bnb_addr: continue
-        paid, info = check_bnb_payment(bnb_addr)
-        bal = 0
-        if "balance_" in info:
-            try: bal = float(info.replace("balance_",""))
-            except: bal = 0
-        if bal > 0:
-            total += bal
-            count += 1
-            status = f"<span style='color:#00ff88'>{bal} USDT ✅</span>"
-        else:
-            status = "<span style='color:#ff4444'>0</span>"
-        rows += f"<tr><td>{sub.get('user_id','')}</td><td style='font-size:10px'><a href='https://bscscan.com/address/{bnb_addr}' target='_blank' style='color:#4db8ff'>{bnb_addr}</a></td><td>{status}</td><td><a href='https://bscscan.com/address/{bnb_addr}#tokentxns' target='_blank' style='color:#fff;background:#e94560;padding:4px 8px;border-radius:5px;text-decoration:none'>BscScan</a></td></tr>"
-    html = f"<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><style>body{{background:#0a0a0f;color:#fff;font-family:Arial;padding:15px}}.box{{background:#16162a;padding:20px;border-radius:15px;max-width:1000px;margin:auto}}table{{width:100%;border-collapse:collapse}}th,td{{border:1px solid #333;padding:8px;font-size:12px}}th{{background:#1e1e3a}}.total{{background:#e94560;padding:15px;border-radius:10px;text-align:center;font-weight:bold;margin:10px 0}}</style></head><body><div class='box'><h2>لوحة تحكم عناوين الدفع</h2><div class='total'>الاجمالي: {total:.2f} USDT من {count} زبون</div><p>ROOT: {ROOT_WALLET}</p><table><tr><th>User</th><th>رابط الدفع</th><th>الرصيد</th><th>كشف</th></tr>{rows}</table></div></body></html>"
-    return Response(html, mimetype='text/html')
+    try:
+        if not supabase:
+            return "No DB connected"
+        all_subs = supabase.table("subscriptions").select("*").order("created_at", desc=True).limit(100).execute()
+        data = all_subs.data or []
+        rows = ""
+        for sub in data:
+            bnb_addr = sub.get("bnb_addr","")
+            if not bnb_addr: 
+                continue
+            uid = sub.get("user_id","")
+            # نوري الرابط فقط - بلا ما نكلم bsc
+            rows += f"<tr><td>{uid}</td><td style='font-size:10px'><a href='https://bscscan.com/address/{bnb_addr}' target='_blank' style='color:#4db8ff'>{bnb_addr}</a></td><td><a href='https://bscscan.com/address/{bnb_addr}#tokentxns' target='_blank' style='background:#e94560;color:#fff;padding:5px 8px;border-radius:6px;text-decoration:none'>كشف BscScan</a></td></tr>"
+        
+        html = f"""
+        <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'>
+        <style>body{{background:#0a0a0f;color:#fff;font-family:Arial;padding:15px}}
+        .box{{background:#16162a;padding:20px;border-radius:15px;max-width:1000px;margin:auto}}
+        table{{width:100%;border-collapse:collapse}}th,td{{border:1px solid #333;padding:8px;font-size:12px}}th{{background:#1e1e3a}}</style>
+        </head><body><div class='box'>
+        <h2>لوحة تحكم - روابط الدفع</h2>
+        <p>عدد العناوين: {len(data)} | ROOT: {ROOT_WALLET}</p>
+        <table><tr><th>User</th><th>رابط الدفع (العنوان الفرعي)</th><th>الدليل</th></tr>{rows if rows else '<tr><td colspan=3>مافيش بيانات</td></tr>'}</table>
+        <p style='font-size:11px;opacity:0.6;margin-top:15px'>اضغط على كشف BscScan باش تشوف هل دفع ولا لا - الميتاماسك ما يوريش</p>
+        </div></body></html>
+        """
+        return Response(html, mimetype='text/html')
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"Admin Error: {e}", 500
 
 @app.route("/getfile/<file_id>")
 def get_file(file_id):
