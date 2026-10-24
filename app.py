@@ -1,5 +1,4 @@
-import os
-import requests
+import os, requests, hashlib, hmac, base58
 from flask import Flask, jsonify, request, redirect, send_file
 try:
     from flask_cors import CORS
@@ -11,6 +10,8 @@ import io
 import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from Crypto.Hash import keccak
+from ecdsa import VerifyingKey, SECP256k1
 
 app = Flask(__name__)
 CORS(app)
@@ -21,13 +22,39 @@ DRIVE_NPVT_ID = os.getenv("DRIVE_NPVT_ID")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 ADMIN_KEY = "admin123"
+XPUB_BNB = os.getenv("XPUB_BNB")
+BSC_API_KEY = os.getenv("BSC_API_KEY")
 
-MONETAG_TAG = '<meta name="monetag" content="ec8829fd61da02e469e1155a13159576">'
-# الصيغة الجديدة الصحيحة لـ Monetag Well-to-do tag - باش يتوثق
-MONETAG_AD_CODE = """<script>(function(s){s.dataset.zone='12100604',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"""
+USDT_BEP20_CONTRACT = "0x55d398326f99059fF775485246999027B3197955"
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 FOLDER = "files"
 FILES = ["File.npvt", "File.ssc", "File.nm", "File1.ssc"]
+
+# --- نظام BNB ---
+def ckd_pub(chain, pub, index):
+    data = pub + index.to_bytes(4, 'big')
+    I = hmac.new(chain, data, hashlib.sha512).digest()
+    il_int = int.from_bytes(I[:32], 'big')
+    vk = VerifyingKey.from_string(pub[1:], curve=SECP256k1)
+    point = vk.pubkey.point + il_int * SECP256k1.generator
+    x, y = point.x(), point.y()
+    new_pub = (b'\x02' if y % 2 == 0 else b'\x03') + x.to_bytes(32, 'big')
+    return I[32:], new_pub, point
+
+def get_bnb_address(user_index):
+    raw = base58.b58decode_check(XPUB_BNB)
+    chain, pub = raw[13:45], raw[45:78]
+    c0, p0, _ = ckd_pub(chain, pub, 0)
+    _, _, pt = ckd_pub(c0, p0, user_index)
+    k = keccak.new(digest_bits=256)
+    k.update(b'\x04' + pt.x().to_bytes(32,'big') + pt.y().to_bytes(32,'big'))
+    addr = k.digest()[-20:].hex()
+    k2 = keccak.new(digest_bits=256); k2.update(addr.encode()); h = k2.hexdigest()
+    return "0x" + "".join(c.upper() if int(h[i],16)>=8 else c for i,c in enumerate(addr))
+
+def user_index_from_id(user_id):
+    return int(hashlib.sha256(user_id.encode()).hexdigest()[:8], 16) % 1000000
 
 def parse_expire(s):
     if not s: return datetime.now()
@@ -73,11 +100,66 @@ def get_user(user_id):
 
 @app.route('/')
 def index():
-    # هذا المهم باش Monetag يتوثق - لازم الزوز بعد <head> مباشرة
-    return f"""<html><head>{MONETAG_TAG}
-    {MONETAG_AD_CODE}
-    <meta charset="UTF-8"><title>Verified</title></head>
-    <body style="font-family:Tahoma;text-align:center;padding:50px;">OK - Monetag 12100604 Installed - Verification OK</body></html>""", 200
+    return f"""<html><head><meta charset="UTF-8"><title>OK</title></head>
+    <body style="font-family:Tahoma;text-align:center;padding:50px;">OK - NO ADS - BNB System Working V2</body></html>""", 200
+
+@app.route('/pay/<user_id>')
+def pay_page(user_id):
+    idx=user_index_from_id(user_id)
+    bnb_addr=get_bnb_address(idx)
+    return f"""
+    <html dir="rtl"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>دفع 1$ - {user_id}</title>
+    <style>body{{font-family:Tahoma;background:#0f172a;color:#fff;padding:20px}}
+    .card{{background:#1e293b;padding:25px;border-radius:15px;max-width:500px;margin:auto;text-align:center}}
+    .addr{{background:#0f172a;padding:15px;border-radius:10px;word-break:break-all;border:2px solid #f0b90b;color:#f0b90b;font-weight:bold;margin:15px 0}}
+    .btn{{background:#f0b90b;color:#000;padding:16px;border-radius:12px;width:100%;border:none;font-size:18px;font-weight:bold;cursor:pointer;margin-top:10px}}
+    </style></head><body>
+    <div class="card">
+      <h1>💰 اشتراك مميز - 1$ فقط</h1>
+      <p>30 يوم بدون قيود + كل الملفات</p>
+      <p style="color:#94a3b8">شبكة: <b>BNB Smart Chain (BEP20)</b></p>
+      <div class="addr">{bnb_addr}</div>
+      <button class="btn" onclick="navigator.clipboard.writeText('{bnb_addr}');alert('تم نسخ العنوان')">📋 نسخ العنوان</button>
+      <p style="margin:15px 0">المبلغ: <b style="font-size:26px;color:#f0b90b">1 USDT (BEP20)</b></p>
+      <button class="btn" style="background:#22c55e;color:white" onclick="checkPay()">🔍 تحقق من الدفع</button>
+      <p id="st"></p>
+    </div>
+    <script>
+    function checkPay(){{
+      document.getElementById('st').innerHTML='⏳ نتحقق...';
+      fetch('/verify/{user_id}').then(r=>r.json()).then(d=>{{
+        if(d.paid){{ document.getElementById('st').innerHTML='✅ تم! 30 يوم تفعلو'; }}
+        else{{ document.getElementById('st').innerHTML='❌ لم يصل بعد - حول 1 USDT BEP20'; }}
+      }});
+    }}
+    </script></body></html>
+    """
+
+@app.route('/verify/<user_id>')
+def verify(user_id):
+    idx=user_index_from_id(user_id)
+    bnb_addr=get_bnb_address(idx)
+    try:
+        url=f"https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx&contractaddress={USDT_BEP20_CONTRACT}&address={bnb_addr}&page=1&offset=5&sort=desc&apikey={BSC_API_KEY}"
+        r=requests.get(url,timeout=15).json()
+        for tx in r.get('result',[]):
+            try:
+                if isinstance(tx,str): continue
+                val=int(tx.get('value',0))/10**18
+                if val>=0.9:
+                    u=get_user(user_id) or {{"user_id":user_id}}
+                    u["expires_at"]=(datetime.now()+timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+                    u["status"]="active"; u["plan"]="paid"
+                    u["allowed_files"]=FILES
+                    u["page_enabled"]=True; u["can_download"]=True
+                    save_user(u)
+                    return jsonify({{"paid":True,"tx":tx.get('hash'),"amount":val}})
+            except: continue
+    except Exception as e:
+        return jsonify({{"paid":False,"error":str(e)}})
+    return jsonify({{"paid":False,"bnb_addr":bnb_addr}})
 
 @app.route('/check', methods=['GET'])
 def check():
@@ -112,9 +194,9 @@ def check():
 def user_page(user_id):
     user = get_user(user_id)
     if not user:
-        return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body><h2>المستخدم غير موجود</h2></body></html>", 404
+        return f"<html><head><meta charset='UTF-8'></head><body><h2>المستخدم غير موجود</h2></body></html>", 404
     if not user.get("page_enabled", True):
-        return f"<html><head>{MONETAG_TAG}<meta charset='UTF-8'></head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة</h2></body></html>", 403
+        return f"<html><head><meta charset='UTF-8'></head><body><h2 style='color:red;text-align:center;margin-top:100px;'>⛔ صفحتك موقوفة</h2></body></html>", 403
     rem = get_remaining_hours(user)
     is_expired = rem <= 0
     wait_str = ""
@@ -128,9 +210,9 @@ def user_page(user_id):
     allowed = get_allowed_files(user)
     can_dl = False if is_expired else user.get("can_download", True)
     if is_expired:
-        banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3>⏳ انتهى اشتراكك</h3><p>عليك الانتظار: <b>{wait_str}</b></p></div>"
+        banner = f"<div style='background:#dc3545;color:white;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center;'><h3>⏳ انتهى اشتراكك</h3><p>عليك الانتظار: <b>{wait_str}</b></p><a href='/pay/{user_id}' style='background:#f0b90b;color:#000;padding:10px 20px;border-radius:8px;text-decoration:none;display:inline-block;margin-top:10px;'>💰 تجديد 1$ - 30 يوم</a></div>"
     else:
-        banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p>متبقي: {format_hm(rem)}</p></div>"
+        banner = f"<div style='background:linear-gradient(135deg,#007bff,#6610f2);color:white;padding:20px;border-radius:15px;text-align:center;margin-bottom:20px;'><h2>صفحتك الخاصة</h2><small><code>{user_id}</code></small><p>متبقي: {format_hm(rem)}</p><a href='/pay/{user_id}' style='background:#f0b90b;color:#000;padding:8px 15px;border-radius:8px;text-decoration:none;display:inline-block;margin-top:10px;'>💰 ترقية 30 يوم</a></div>"
     cards = ""
     for f in allowed:
         go_link = f"{request.host_url}go/{f}?user_id={user_id}"
@@ -139,8 +221,7 @@ def user_page(user_id):
         else:
             btn = f"<span style='background:#ccc;color:#666;padding:12px;border-radius:8px;display:block;'>🔒 معطل</span>"
         cards += f"<div style='background:white;border:1px solid #eee;border-radius:12px;padding:15px;text-align:center;'><div style='font-size:30px;'>📦</div><h4>{f}</h4>{btn}</div>"
-    # صفحة اليوزر نظيفة بدون إعلانات مزعجة
-    return f"""<html dir="rtl"><head>{MONETAG_TAG}<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
+    return f"""<html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>صفحتي</title></head>
     <body style="font-family:Tahoma;background:#f4f4f4;padding:15px;margin:0;"><div style="max-width:800px;margin:auto;">{banner}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;">{cards}</div></div></body></html>"""
 
 @app.route('/go/<filename>')
@@ -151,56 +232,12 @@ def go_file(filename):
     if not user or get_remaining_hours(user) <= 0: return "Subscription ended", 403
     direct = f"{request.host_url}download/{filename}?user_id={user_id}"
     return f"""
-    <html dir="rtl"><head>{MONETAG_TAG}{MONETAG_AD_CODE}
+    <html dir="rtl"><head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>تحميل {filename}</title>
-    <style>
-      body{{font-family:Tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px;margin:0}}
-      .box{{background:#1e293b;padding:30px;border-radius:15px;max-width:500px;margin:20px auto;border:1px solid #334155;position:relative;z-index:9999}}
-      .timer{{font-size:70px;color:#22c55e;margin:15px;font-weight:bold}}
-      .btn{{background:#22c55e;color:white;padding:18px 40px;border-radius:12px;display:none;font-size:22px;font-weight:bold;cursor:pointer;border:none;width:100%;max-width:300px}}
-      .overlay{{position:fixed;top:0;left:0;width:100%;height:100%;background:#0f172a;z-index:2147483646;display:none;justify-content:center;align-items:center;flex-direction:column;padding:20px;box-sizing:border-box}}
-      .close-ad{{background:#ef4444;color:white;border:none;padding:12px 25px;border-radius:25px;cursor:pointer;font-weight:bold;font-size:18px;margin-top:20px}}
-    </style>
-    </head><body>
-    <div id="adOverlay" class="overlay">
-      <h2 style="color:#22c55e">⏳ جاري فتح الإعلان...</h2>
-      <p>بعد مشاهدة الإعلان اضغط رجوع ↩️ ثم متابعة التحميل</p>
-      <button onclick="closeAdAndDownload()" class="close-ad" id="continueBtn">✕ إغلاق ومتابعة التحميل</button>
-      <p style="color:#64748b;font-size:12px;margin-top:20px">المشاهدة تنحسب حتى لو سكرت بسرعة ❤️</p>
-    </div>
-    <div class="box">
-      <h2>📦 {filename}</h2>
-      <p id="wt">جاري تجهيز الرابط... انتظر 10 ثواني</p>
-      <div class="timer" id="tm">10</div>
-      <button id="dl" class="btn" onclick="showAd()">⬇️ تحميل الآن</button>
-    </div>
-    <script>
-      let c=10;
-      let downloadUrl = "{direct}";
-      function t(){{
-        let el=document.getElementById('tm');
-        el.innerHTML=c;
-        if(c<=0){{
-          document.getElementById('dl').style.display='inline-block';
-          document.getElementById('wt').innerHTML='✅ الرابط جاهز';
-        }} else {{ c--; setTimeout(t,1000); }}
-      }}
-      function showAd(){{
-        // نوري طبقة الإغلاق أولا
-        document.getElementById('adOverlay').style.display='flex';
-        // نخلي زر المتابعة يبان بعد ثانيتين
-        setTimeout(function(){{
-          document.getElementById('continueBtn').style.display='block';
-        }},2000);
-        // Monetag سيفتح تلقائيا بعد هذا الكليك - هذا اللي يخلي الإعلان ينحسب
-      }}
-      function closeAdAndDownload(){{
-        window.location.href = downloadUrl;
-      }}
-      window.onload=t;
-    </script>
-    </body></html>
+    <style>body{{font-family:Tahoma;background:#f4f4f4;color:#333;text-align:center;padding:20px}} .box{{background:white;padding:30px;border-radius:15px;max-width:500px;margin:20px auto}} .timer{{font-size:60px;color:#007bff;margin:15px}} .btn{{background:#28a745;color:white;padding:15px 30px;border-radius:10px;display:none;font-size:20px;text-decoration:none}}</style>
+    </head><body><div class="box"><h2>📦 {filename}</h2><p>جاري تجهيز الرابط</p><div class="timer" id="tm">3</div><a id="dl" class="btn" href="{direct}">⬇️ تحميل الآن</a></div>
+    <script>let c=3;function t(){{document.getElementById('tm').innerHTML=c;if(c<=0){{document.getElementById('dl').style.display='inline-block';document.getElementById('tm').style.display='none';}} else{{c--; setTimeout(t,1000);}}}}window.onload=t;</script></body></html>
     """
 
 @app.route('/download/<filename>', methods=['GET'])
@@ -279,7 +316,7 @@ def admin_panel():
     all_users = query.execute().data
     html = f"""<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>الادمن</title>
     <style>body{{font-family:Tahoma;background:#f4f4f4;padding:10px;font-size:13px}}.c{{max-width:1300px;margin:auto;background:white;padding:15px;border-radius:10px}} table{{width:100%;border-collapse:collapse}} th{{background:#007bff;color:white;padding:8px}} td{{padding:8px;border-bottom:1px solid #ddd;text-align:center}}.b{{padding:5px 9px;border-radius:5px;color:white;text-decoration:none;font-size:11px;display:inline-block;margin:2px}}.on{{background:#28a745}}.off{{background:#dc3545}}.copy{{background:#17a2b8}}.small-inp{{width:55px;padding:4px;text-align:center}}</style>
-    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - OnClick نفس الصفحة ✅ Verified</h2>{msg}
+    <script>function copyId(id){{navigator.clipboard.writeText(id);alert('تم نسخ: '+id);}}function savePerm(id){{let c=document.querySelectorAll('.chk_'+id+':checked');let f=Array.from(c).map(x=>x.value).join(',');location.href='/admin?key={ADMIN_KEY}&action=set_perm&user_id='+id+'&files='+f}}</script></head><body><div class="c"><h2 style="text-align:center;">لوحة الادمن - بدون اعلانات ✅ BNB V2</h2>{msg}
     <form method="get" style="background:#f8f9fa;padding:10px;border-radius:8px;margin-bottom:15px;display:flex;gap:5px;flex-wrap:wrap;"><input type="hidden" name="key" value="{ADMIN_KEY}">
     <input type="text" name="search" placeholder="بحث" value="{search if search else ''}"><span>ايام:</span><input class="small-inp" type="number" name="days" value="1"><span>ساعات:</span><input class="small-inp" type="number" name="hours" value="0">
     <button name="action" value="add_all" style="background:#007bff;color:white;border:none;padding:7px 12px;border-radius:5px;">➕ للكل</button><button name="action" value="sub_all" style="background:#dc3545;color:white;border:none;padding:7px 12px;border-radius:5px;">➖ للكل</button><button type="submit">بحث</button></form>
