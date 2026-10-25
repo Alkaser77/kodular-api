@@ -1,10 +1,7 @@
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-import os, base64, requests, hmac, hashlib, base58
+import os, base64, requests, hashlib
 from datetime import datetime, timedelta
-from Crypto.Hash import keccak
-from ecdsa import SECP256k1
-from ecdsa.ellipticcurve import Point
 from supabase import create_client
 from eth_account import Account
 Account.enable_unaudited_hdwallet_features()
@@ -14,14 +11,10 @@ CORS(app)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+MNEMONIC = os.getenv("MNEMONIC")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
-XPUB_BNB = os.getenv("XPUB_BNB")
-MNEMONIC = os.getenv("MNEMONIC") # ضيفه في Render
 ADMIN_KEY = os.getenv("ADMIN_KEY", "123456")
-
 USDT_BEP20 = "0x55d398326f99059fF775485246999027B3196775"
-PRICE_USDT = 15
 ROOT_WALLET = "0x5430161DA6be4EF2B1Cfd2452F076eB67Db3BAc0"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
@@ -30,44 +23,75 @@ def stable_hash(user_id):
     return int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16) % 2147483647
 
 def get_bnb_address(user_index):
-    if not XPUB_BNB:
+    if not MNEMONIC:
         return ROOT_WALLET
+    acct = Account.from_mnemonic(MNEMONIC, account_path=f"m/44'/60'/0'/0/0/{user_index}")
+    return acct.address
+
+@app.route("/sweep_old/<user_id>")
+def sweep_old(user_id):
     try:
-        xpub_clean = XPUB_BNB.strip()
-        raw = base58.b58decode_check(xpub_clean)
-        if len(raw) != 78:
-            return ROOT_WALLET
-        chain = raw[13:45]
-        pub_compressed = raw[45:78]
-        x = int.from_bytes(pub_compressed[1:], 'big')
-        p = SECP256k1.curve.p()
-        y_sq = (pow(x, 3, p) + 7) % p
-        y = pow(y_sq, (p+1)//4, p)
-        if (y % 2 == 0) != (pub_compressed[0] == 2):
-            y = p - y
-        def ckd(chain_code, px, py, idx):
-            parity = b'\x02' if py % 2 == 0 else b'\x03'
-            pub = parity + px.to_bytes(32, 'big')
-            data = pub + idx.to_bytes(4, 'big')
-            I = hmac.new(chain_code, data, hashlib.sha512).digest()
-            il = int.from_bytes(I[:32], 'big')
-            G = SECP256k1.generator
-            curve = SECP256k1.curve
-            parent_point = Point(curve, px, py)
-            child_point = parent_point + il * G
-            return I[32:], child_point.x(), child_point.y()
-        c1, x1, y1 = ckd(chain, x, y, 0)
-        _, x2, y2 = ckd(c1, x1, y1, user_index)
-        k = keccak.new(digest_bits=256)
-        k.update(b'\x04' + x2.to_bytes(32,'big') + y2.to_bytes(32,'big'))
-        addr_hex = k.digest()[-20:].hex()
-        k2 = keccak.new(digest_bits=256)
-        k2.update(addr_hex.encode())
-        hash_hex = k2.hexdigest()
-        checksum = "".join(c.upper() if int(hash_hex[i],16) >= 8 else c for i,c in enumerate(addr_hex))
-        return "0x" + checksum
-    except:
-        return ROOT_WALLET
+        from eth_account import Account
+        import hmac, hashlib
+        from ecdsa import SigningKey, SECP256k1
+        CURVE_N = SECP256k1.order
+
+        def seed_from_mnemonic(m):
+            return hashlib.pbkdf2_hmac('sha512', m.encode(), b'mnemonic', 2048)
+        
+        def priv_to_pub_compressed(p):
+            sk = SigningKey.from_string(p, curve=SECP256k1)
+            x = sk.verifying_key.pubkey.point.x()
+            y = sk.verifying_key.pubkey.point.y()
+            return (b'\x02' if y%2==0 else b'\x03') + x.to_bytes(32,'big')
+
+        def derive(p, c, idx):
+            pub = priv_to_pub_compressed(p)
+            data = pub + idx.to_bytes(4,'big')
+            I = hmac.new(c, data, hashlib.sha512).digest()
+            child = (int.from_bytes(I[:32],'big') + int.from_bytes(p,'big')) % CURVE_N
+            return child.to_bytes(32,'big'), I[32:]
+
+        def master(s):
+            I = hmac.new(b"Bitcoin seed", s, hashlib.sha512).digest()
+            return I[:32], I[32:]
+
+        seed = seed_from_mnemonic(MNEMONIC)
+        priv, chain = master(seed)
+        for i in [44+0x80000000, 60+0x80000000, 0+0x80000000, 0]:
+            real = i-0x80000000 if i>=0x80000000 else i
+            # hardened derivation simplified
+            if i>=0x80000000:
+                data = b'\x00' + priv + i.to_bytes(4,'big')
+                I = hmac.new(chain, data, hashlib.sha512).digest()
+                priv = ((int.from_bytes(I[:32],'big') + int.from_bytes(priv,'big')) % CURVE_N).to_bytes(32,'big')
+                chain = I[32:]
+            else:
+                priv, chain = derive(priv, chain, real)
+
+        old_idx = abs(int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16)) % 2147483647
+        priv, chain = derive(priv, chain, 0)
+        priv, chain = derive(priv, chain, old_idx)
+        
+        acct = Account.from_key(priv)
+        old_addr = acct.address
+
+        rpc = "https://bsc-dataseed.binance.org/"
+        bal = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getBalance","params":[old_addr,"latest"],"id":1}, timeout=10).json()
+        bal_wei = int(bal.get("result","0x0"), 16)
+        
+        if bal_wei == 0:
+            return jsonify({"old_addr": old_addr, "balance": 0, "msg": "العنوان فاضي او الرصيد تحول خلاص"})
+
+        gas_price = 3*10**9
+        gas = 21000
+        nonce = int(requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getTransactionCount","params":[old_addr,"latest"],"id":1}, timeout=10).json().get("result","0x0"),16)
+        tx = {'to': ROOT_WALLET, 'value': bal_wei - gas*gas_price, 'gas': gas, 'gasPrice': gas_price, 'nonce': nonce, 'chainId': 56}
+        signed = Account.sign_transaction(tx, priv)
+        sent = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":[signed.rawTransaction.hex()],"id":1}, timeout=10).json()
+        return jsonify({"old_addr": old_addr, "root": ROOT_WALLET, "result": sent})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 def check_bnb_payment(bnb_address, test_mode=False):
     try:
@@ -76,10 +100,7 @@ def check_bnb_payment(bnb_address, test_mode=False):
             payload = {"jsonrpc":"2.0","method":"eth_getBalance","params":[bnb_address,"latest"],"id":1}
             resp = requests.post(rpc_url, json=payload, timeout=15).json()
             bal_wei = int(resp.get("result","0x0"), 16)
-            bal_bnb = bal_wei / 10**18
-            if bal_bnb >= 0.0001:
-                return True, f"test_bnb_balance_{bal_bnb}"
-            return False, f"test_bnb_balance_{bal_bnb}"
+            return (bal_wei / 10**18 >= 0.0001, f"balance_{bal_wei/10**18}")
         else:
             addr_clean = bnb_address.lower().replace("0x","")
             data = "0x70a08231" + "0"*24 + addr_clean
@@ -87,45 +108,28 @@ def check_bnb_payment(bnb_address, test_mode=False):
             resp = requests.post(rpc_url, json=payload, timeout=15).json()
             balance_hex = resp.get("result","0x0")
             balance_int = 0 if not balance_hex or balance_hex == "0x" else int(balance_hex, 16)
-            balance_usdt = balance_int / 10**18
-            if balance_usdt >= 14.9:
-                return True, f"balance_{balance_usdt}"
-            return False, f"balance_{balance_usdt}"
+            return (balance_int / 10**18 >= 14.9, f"usdt_{balance_int/10**18}")
     except Exception as e:
         return False, str(e)
 
 @app.route("/")
 def home():
-    return f"OK - BNB System Working - ROOT {ROOT_WALLET}"
+    return f"OK - MNEMONIC SYSTEM - {ROOT_WALLET}"
 
 @app.route("/getkey/<user_id>")
 def getkey(user_id):
-    if not MNEMONIC:
-        return "ضيف MNEMONIC في Render Environment", 500
     idx = stable_hash(user_id)
-    old_idx = abs(hash(user_id)) % 2147483647
-    target_new = get_bnb_address(idx)
-    target_old = get_bnb_address(old_idx)
-    html = f"NEW stable target {user_id} idx {idx} = {target_new}<br>OLD hash target idx {old_idx} = {target_old}<br><br>"
-    for path in [f"m/44'/60'/0'/0/0/{idx}", f"m/44'/60'/0'/0/{idx}", f"m/44'/60'/0'/0/0/{old_idx}", f"m/44'/60'/0'/0/{old_idx}"]:
-        try:
-            acct = Account.from_mnemonic(MNEMONIC, account_path=path)
-            ok = "✅"
-            if acct.address.lower() not in [target_new.lower(), target_old.lower()]:
-                ok = "❌"
-            html += f"{ok} Path {path}<br>Addr {acct.address}<br>PK {acct.key.hex()}<br><br>"
-        except Exception as e:
-            html += f"Error {path}: {e}<br><br>"
-    return html
+    addr = get_bnb_address(idx)
+    return f"User {user_id}<br>idx {idx}<br>Addr {addr}<br>هذا العنوان الصح"
 
 @app.route("/pay/<user_id>")
 def pay_page(user_id):
     bnb_addr = get_bnb_address(stable_hash(user_id))
     html = f"""<html><head><meta name="viewport" content="width=device-width"><meta charset="utf-8">
-    <style>body{{background:#1a1a2e;color:#fff;font-family:Arial;text-align:center;padding:20px}}.box{{background:#16213e;padding:25px;border-radius:15px;max-width:450px;margin:auto;border:1px solid #0f3460}}.addr{{background:#000;padding:15px;word-break:break-all;border-radius:10px;font-size:14px;margin:15px 0;border:1px dashed #e94560}}button{{padding:15px 25px;border:none;border-radius:10px;font-weight:bold;cursor:pointer;margin:5px;width:100%}}.copy{{background:#e94560;color:#fff}}.check{{background:#0f3460;color:#fff}}</style></head><body>
-    <div class="box"><h2>دفع 15 USDT (BEP20)</h2><p>يوزر: {user_id}</p><p>الشبكة: <b>BSC / BEP20</b></p><div class="addr" id="addr">{bnb_addr}</div>
-    <button class="copy" onclick="navigator.clipboard.writeText('{bnb_addr}');this.innerText='تم النسخ'">نسخ العنوان</button>
-    <button class="check" onclick="window.location.href='/verify/{user_id}'">تحقق من الدفع</button></div></body></html>"""
+    <style>body{{background:#1a1a2e;color:#fff;font-family:Arial;text-align:center;padding:20px}}.box{{background:#16213e;padding:25px;border-radius:15px;max-width:450px;margin:auto}}.addr{{background:#000;padding:15px;word-break:break-all;border-radius:10px}}</style></head><body>
+    <div class="box"><h2>دفع 15 USDT (BEP20)</h2><p>{user_id}</p><div class="addr">{bnb_addr}</div>
+    <button onclick="navigator.clipboard.writeText('{bnb_addr}')">نسخ العنوان</button><br><br>
+    <button onclick="window.location.href='/verify/{user_id}'">تحقق من الدفع</button></div></body></html>"""
     return Response(html, mimetype='text/html')
 
 @app.route("/verify/<user_id>")
@@ -145,54 +149,13 @@ def verify_payment(user_id):
             pass
     return jsonify({"paid": paid, "tx": info, "bnb_addr": bnb_addr})
 
-@app.route("/admin")
-def admin_dashboard():
-    key = request.args.get("key", "")
-    if key != ADMIN_KEY:
-        return "Unauthorized - add ?key=123456", 401
-    try:
-        if not supabase:
-            return "No DB connected"
-        all_subs = supabase.table("subscriptions").select("*").order("created_at", desc=True).limit(100).execute()
-        data = all_subs.data or []
-        rows = ""
-        for sub in data:
-            bnb_addr = sub.get("bnb_addr","")
-            if not bnb_addr: 
-                continue
-            uid = sub.get("user_id","")
-            rows += f"<tr><td>{uid}</td><td style='font-size:10px'><a href='https://bscscan.com/address/{bnb_addr}' target='_blank' style='color:#4db8ff'>{bnb_addr}</a></td><td><a href='https://bscscan.com/address/{bnb_addr}#tokentxns' target='_blank' style='background:#e94560;color:#fff;padding:5px 8px;border-radius:6px;text-decoration:none'>كشف BscScan</a></td></tr>"
-        html = f"""
-        <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'>
-        <style>body{{background:#0a0a0f;color:#fff;font-family:Arial;padding:15px}}
-        .box{{background:#16162a;padding:20px;border-radius:15px;max-width:1000px;margin:auto}}
-        table{{width:100%;border-collapse:collapse}}th,td{{border:1px solid #333;padding:8px;font-size:12px}}th{{background:#1e1e3a}}</style>
-        </head><body><div class='box'>
-        <h2>لوحة تحكم - روابط الدفع</h2>
-        <p>عدد العناوين: {len(data)} | ROOT: {ROOT_WALLET}</p>
-        <table><tr><th>User</th><th>رابط الدفع</th><th>الدليل</th></tr>{rows if rows else '<tr><td colspan=3>مافيش بيانات</td></tr>'}</table>
-        </div></body></html>
-        """
-        return Response(html, mimetype='text/html')
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return f"Admin Error: {e}", 500
-
 @app.route("/getfile/<file_id>")
 def get_file(file_id):
     user_id = request.args.get("user_id", "unknown")
-    sub = supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
-    if not sub.data:
-        return jsonify({"error": "not_subscribed", "pay_url": f"{API_URL}/pay/{user_id}"}), 403
-    expire_str = sub.data[0].get("expire_at")
-    try:
-        exp = datetime.fromisoformat(expire_str.replace("Z","+00:00").replace("+00:00",""))
-        if exp.tzinfo: exp = exp.replace(tzinfo=None)
-        if exp < datetime.utcnow():
-            return jsonify({"error": "expired", "pay_url": f"{API_URL}/pay/{user_id}"}), 403
-    except:
-        return jsonify({"error": "expired"}), 403
+    if supabase:
+        sub = supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
+        if not sub.data:
+            return jsonify({"error": "not_subscribed", "pay_url": f"{API_URL}/pay/{user_id}"}), 403
     try:
         file_url = f"https://drive.google.com/uc?export=download&id={file_id}"
         r = requests.get(file_url, timeout=30)
