@@ -5,3 +5,5 @@ supabase
 eth-account
 ecdsa
 gunicorn
+base58
+eth-hash
