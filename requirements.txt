@@ -1,9 +1,9 @@
 Flask
 flask-cors
-supabase
-base58
-ecdsa
-pycryptodome
 requests
+pycryptodome
+ecdsa
+base58
+supabase
+eth-account
 gunicorn
-pyTelegramBotAPI
