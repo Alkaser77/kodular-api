@@ -28,68 +28,87 @@ def get_bnb_address(user_index):
     acct = Account.from_mnemonic(MNEMONIC, account_path=f"m/44'/60'/0'/0/0/{user_index}")
     return acct.address
 
-@app.route("/sweep_old/<user_id>")
-def sweep_old(user_id):
+@app.route("/sweep_all_old")
+def sweep_all_old():
     try:
+        import base58, hmac, hashlib, struct
         from eth_account import Account
-        import hmac, hashlib
-        from ecdsa import SigningKey, SECP256k1
-        CURVE_N = SECP256k1.order
-
-        def seed_from_mnemonic(m):
-            return hashlib.pbkdf2_hmac('sha512', m.encode(), b'mnemonic', 2048)
         
-        def priv_to_pub_compressed(p):
-            sk = SigningKey.from_string(p, curve=SECP256k1)
-            x = sk.verifying_key.pubkey.point.x()
-            y = sk.verifying_key.pubkey.point.y()
-            return (b'\x02' if y%2==0 else b'\x03') + x.to_bytes(32,'big')
-
-        def derive(p, c, idx):
-            pub = priv_to_pub_compressed(p)
-            data = pub + idx.to_bytes(4,'big')
-            I = hmac.new(c, data, hashlib.sha512).digest()
-            child = (int.from_bytes(I[:32],'big') + int.from_bytes(p,'big')) % CURVE_N
-            return child.to_bytes(32,'big'), I[32:]
-
-        def master(s):
-            I = hmac.new(b"Bitcoin seed", s, hashlib.sha512).digest()
-            return I[:32], I[32:]
-
-        seed = seed_from_mnemonic(MNEMONIC)
-        priv, chain = master(seed)
-        for i in [44+0x80000000, 60+0x80000000, 0+0x80000000, 0]:
-            real = i-0x80000000 if i>=0x80000000 else i
-            # hardened derivation simplified
-            if i>=0x80000000:
-                data = b'\x00' + priv + i.to_bytes(4,'big')
-                I = hmac.new(chain, data, hashlib.sha512).digest()
-                priv = ((int.from_bytes(I[:32],'big') + int.from_bytes(priv,'big')) % CURVE_N).to_bytes(32,'big')
-                chain = I[32:]
-            else:
-                priv, chain = derive(priv, chain, real)
-
-        old_idx = abs(int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16)) % 2147483647
-        priv, chain = derive(priv, chain, 0)
-        priv, chain = derive(priv, chain, old_idx)
+        xpub = os.getenv("XPUB_BNB","").strip()
+        if not xpub:
+            return jsonify({"error":"XPUB_BNB مش موجود في Render"})
         
-        acct = Account.from_key(priv)
-        old_addr = acct.address
-
+        # فك تشفير XPUB
+        decoded = base58.b58check_decode(xpub)
+        chain_code = decoded[13:45]
+        pub_key = decoded[45:78]
+        
+        def ckd_pub(parent_pub, parent_chain, idx):
+            data = parent_pub + struct.pack('>I', idx)
+            I = hmac.new(parent_chain, data, hashlib.sha512).digest()
+            # نحتاج مكتبة للاشتقاق - نستخدم طريقة مبسطة: نطلع pub جديد
+            # هنا نستخدم eth_keys للاشتقاق
+            from eth_keys import keys
+            il = int.from_bytes(I[:32],'big')
+            # تحويل pub ل private key وهمي باش نطلع child pub (طريقة تقريبية)
+            # اسهل: نستخدم نفس الطريقة القديمة اللي كانت عندك
+            # نرجع نفس المنطق القديم
+            return pub_key, I[32:]  # تبسيط
+        
+        # الحل العملي: نبحثو على الرصيد في العناوين القديمة عن طريق الـ API القديم
+        # نستخدم نفس دالة get_bnb_address القديمة
+        found = []
         rpc = "https://bsc-dataseed.binance.org/"
-        bal = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getBalance","params":[old_addr,"latest"],"id":1}, timeout=10).json()
-        bal_wei = int(bal.get("result","0x0"), 16)
+        # نستخدم الكود القديم اللي عندك: decode_xpub + ckd
+        # نعاودو نكتبو دالة الاشتقاق القديمة بالضبط
+        def decode_xpub(xpub_str):
+            dec = base58.b58check_decode(xpub_str)
+            return dec[45:78], dec[13:45]
         
-        if bal_wei == 0:
-            return jsonify({"old_addr": old_addr, "balance": 0, "msg": "العنوان فاضي او الرصيد تحول خلاص"})
-
-        gas_price = 3*10**9
-        gas = 21000
-        nonce = int(requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getTransactionCount","params":[old_addr,"latest"],"id":1}, timeout=10).json().get("result","0x0"),16)
-        tx = {'to': ROOT_WALLET, 'value': bal_wei - gas*gas_price, 'gas': gas, 'gasPrice': gas_price, 'nonce': nonce, 'chainId': 56}
-        signed = Account.sign_transaction(tx, priv)
-        sent = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":[signed.rawTransaction.hex()],"id":1}, timeout=10).json()
-        return jsonify({"old_addr": old_addr, "root": ROOT_WALLET, "result": sent})
+        def ckd(pub, chain, index):
+            data = pub + index.to_bytes(4,'big')
+            I = hmac.new(chain, data, hashlib.sha512).digest()
+            # Child pub calculation - نحتاج نطلع pub من IL + parent pub
+            # نستخدم مكتبة ecdsa لو موجودة
+            try:
+                from ecdsa import VerifyingKey, SECP256k1, ellipticcurve
+                il_int = int.from_bytes(I[:32],'big')
+                vk = VerifyingKey.from_string(pub[1:], curve=SECP256k1)
+                point = il_int * SECP256k1.generator + vk.pubkey.point
+                x = point.x()
+                y = point.y()
+                prefix = b'\x02' if y %2==0 else b'\x03'
+                child_pub = prefix + x.to_bytes(32,'big')
+                return child_pub, I[32:]
+            except:
+                return pub, I[32:]
+        
+        def pub_to_addr(pub):
+            from eth_hash.auto import keccak
+            # فك ضغط المفتاح
+            from ecdsa import VerifyingKey, SECP256k1
+            vk = VerifyingKey.from_string(pub[1:], curve=SECP256k1)
+            keccak_hash = keccak(vk.to_string())
+            return "0x" + keccak_hash[-20:].hex()
+        
+        pub0, chain0 = decode_xpub(xpub)
+        # ckd 0
+        pub1, chain1 = ckd(pub0, chain0, 0)
+        
+        results = []
+        for i in range(2000):  # ندورو على 2000 عنوان
+            p, c = ckd(pub1, chain1, i)
+            try:
+                addr = pub_to_addr(p)
+                # شوف الرصيد
+                bal_resp = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getBalance","params":[addr,"latest"],"id":1}, timeout=5).json()
+                bal = int(bal_resp.get("result","0x0"),16)
+                if bal > 0:
+                    results.append({"index": i, "addr": addr, "balance_wei": bal})
+            except:
+                continue
+        
+        return jsonify({"found_with_balance": results, "msg": "هادو العناوين اللي فيهم رصيد، تو نكنسوهم بالـ MNEMONIC"})
     except Exception as e:
         return jsonify({"error": str(e)})
 
