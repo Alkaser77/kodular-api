@@ -111,36 +111,41 @@ def sweep_one(user_id):
 @app.route("/sweep_old_final")
 def sweep_old_final():
     if not XPRV_OLD:
-        return jsonify({"error": "ما لقيتش XPRV_OLD في الـ Environment"})
+        return jsonify({"error": "XPRV_OLD مش موجود في Environment متاع Render"})
     try:
         from bip32utils import BIP32Key
         from eth_account import Account
-        Account.enable_unaudited_hdwallet_features()
+        xprv = XPRV_OLD.strip().replace("\n","").replace(" ","")
         target = "0x7D6a002E87c6F36873cdBfc01D759Fe020E22549"
         rpc = "https://bsc-dataseed.binance.org/"
-        master = BIP32Key.fromExtendedKey(XPRV_OLD)
+        master = BIP32Key.fromExtendedKey(xprv)
         found = None
         fpath = ""
         for i in range(5000):
-            c1 = master.ChildKey(0).ChildKey(i)
-            a1 = Account.from_key(c1.PrivateKey()).address
-            if a1.lower() == target.lower():
-                found = c1
-                fpath = f"0/{i}"
-                break
-            c2 = master.ChildKey(0).ChildKey(0).ChildKey(i)
-            a2 = Account.from_key(c2.PrivateKey()).address
-            if a2.lower() == target.lower():
-                found = c2
-                fpath = f"0/0/{i}"
-                break
+            try:
+                c1 = master.ChildKey(0).ChildKey(i)
+                priv = c1.PrivateKey()
+                # bip32utils يرجع bytes
+                a1 = Account.from_key(priv).address
+                if a1.lower() == target.lower():
+                    found = c1
+                    fpath = f"0/{i}"
+                    break
+                c2 = master.ChildKey(0).ChildKey(0).ChildKey(i)
+                a2 = Account.from_key(c2.PrivateKey()).address
+                if a2.lower() == target.lower():
+                    found = c2
+                    fpath = f"0/0/{i}"
+                    break
+            except:
+                continue
         if not found:
-            return jsonify({"error": "ما لقيتش العنوان", "target": target})
+            return jsonify({"error": "ما لقيتش العنوان في 5000", "target": target})
         acct = Account.from_key(found.PrivateKey())
         bal_r = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getBalance","params":[acct.address,"latest"],"id":1}, timeout=10).json()
         bal_wei = int(bal_r.get("result","0x0"), 16)
         if bal_wei == 0:
-            return jsonify({"addr": acct.address, "path": fpath, "msg": "فاضي"})
+            return jsonify({"addr": acct.address, "path": fpath, "msg": "فاضي - ما فيهش BNB"})
         gas_price = 5_000_000_000
         gas_limit = 21000
         fee = gas_price * gas_limit
@@ -148,7 +153,8 @@ def sweep_old_final():
         nonce = int(nonce_r.get("result","0x0"), 16)
         tx = {"to": ROOT_WALLET, "value": bal_wei - fee, "gas": gas_limit, "gasPrice": gas_price, "nonce": nonce, "chainId": 56}
         signed = acct.sign_transaction(tx)
-        send_r = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":[signed.raw_transaction.hex()],"id":1}, timeout=10).json()
+        raw = getattr(signed, 'raw_transaction', getattr(signed, 'rawTransaction', None))
+        send_r = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":[raw.hex()],"id":1}, timeout=10).json()
         return jsonify({"from": acct.address, "path": fpath, "to": ROOT_WALLET, "sent": (bal_wei-fee)/1e18, "result": send_r})
     except Exception as e:
         import traceback
