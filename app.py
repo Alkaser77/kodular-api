@@ -31,11 +31,10 @@ def get_bnb_address(user_index):
 @app.route("/sweep_all_old")
 def sweep_all_old():
     try:
-        import base58, hmac, hashlib
+        import base58, hmac
         xpub = os.getenv("XPUB_BNB","").strip()
         if not xpub or not supabase:
             return jsonify({"error":"XPUB او SUPABASE ناقص"})
-
         P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
         def decompress_pub(compressed):
             prefix = compressed[0]
@@ -45,15 +44,12 @@ def sweep_all_old():
             if (y % 2 == 0 and prefix == 3) or (y % 2 == 1 and prefix == 2):
                 y = P - y
             return x, y
-
         def compress_pub(x,y):
             prefix = b'\x02' if y % 2 == 0 else b'\x03'
             return prefix + x.to_bytes(32,'big')
-
         def decode_xpub(xpub_str):
             dec = base58.b58decode_check(xpub_str)
             return dec[45:78], dec[13:45]
-        
         def ckd(pub_compressed, chain, index):
             from ecdsa import SECP256k1
             from ecdsa.ellipticcurve import Point
@@ -65,23 +61,18 @@ def sweep_all_old():
             child_point = il_int * SECP256k1.generator + parent_point
             child_pub = compress_pub(child_point.x(), child_point.y())
             return child_pub, I[32:]
-        
         def pub_to_addr(pub_compressed):
             from eth_hash.auto import keccak
             x, y = decompress_pub(pub_compressed)
             uncompressed = x.to_bytes(32,'big') + y.to_bytes(32,'big')
             keccak_hash = keccak(uncompressed)
             return "0x" + keccak_hash[-20:].hex()
-
         def stable_hash_old(user_id):
             return int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16) % 2147483647
-
         subs = supabase.table("subscriptions").select("user_id").limit(500).execute()
         users = subs.data if subs.data else []
-
         pub0, chain0 = decode_xpub(xpub)
         pub1, chain1 = ckd(pub0, chain0, 0)
-        
         rpc = "https://bsc-dataseed.binance.org/"
         found = []
         for row in users:
@@ -96,17 +87,10 @@ def sweep_all_old():
                     found.append({"user_id": uid, "index": idx, "addr": addr, "bnb": bal/10**18})
             except:
                 continue
-        
         return jsonify({"found": found, "checked": len(users)})
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()})
-            except:
-                continue
-        
-        return jsonify({"found": found, "checked": len(users)})
-    except Exception as e:
-        return jsonify({"error": str(e), "line": str(e.__traceback__)})
 
 def check_bnb_payment(bnb_address, test_mode=False):
     try:
