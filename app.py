@@ -31,12 +31,11 @@ def get_bnb_address(user_index):
 @app.route("/sweep_all_old")
 def sweep_all_old():
     try:
-        import base58, hmac, hashlib, struct
-        
+        import base58, hmac, hashlib
         xpub = os.getenv("XPUB_BNB","").strip()
-        if not xpub:
-            return jsonify({"error":"XPUB_BNB مش موجود في Render"})
-        
+        if not xpub or not supabase:
+            return jsonify({"error":"XPUB او SUPABASE ناقص"})
+
         def decode_xpub(xpub_str):
             dec = base58.b58decode_check(xpub_str)
             return dec[45:78], dec[13:45]
@@ -54,7 +53,7 @@ def sweep_all_old():
                 prefix = b'\x02' if y % 2 == 0 else b'\x03'
                 child_pub = prefix + x.to_bytes(32,'big')
                 return child_pub, I[32:]
-            except Exception as e:
+            except:
                 return pub, I[32:]
         
         def pub_to_addr(pub):
@@ -63,26 +62,35 @@ def sweep_all_old():
             vk = VerifyingKey.from_string(pub[1:], curve=SECP256k1)
             keccak_hash = keccak(vk.to_string())
             return "0x" + keccak_hash[-20:].hex()
-        
-        rpc = "https://bsc-dataseed.binance.org/"
+
+        def stable_hash_old(user_id):
+            return int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16) % 2147483647
+
+        # جيب كل المستخدمين من supabase
+        subs = supabase.table("subscriptions").select("user_id").execute()
+        users = subs.data if subs.data else []
+
         pub0, chain0 = decode_xpub(xpub)
         pub1, chain1 = ckd(pub0, chain0, 0)
         
-        results = []
-        for i in range(2000):
-            p, c = ckd(pub1, chain1, i)
+        rpc = "https://bsc-dataseed.binance.org/"
+        found = []
+        for row in users[:500]: # نشوفو 500 واحد
+            uid = row.get("user_id")
+            idx = stable_hash_old(uid)
+            p, c = ckd(pub1, chain1, idx)
+            addr = pub_to_addr(p)
             try:
-                addr = pub_to_addr(p)
                 bal_resp = requests.post(rpc, json={"jsonrpc":"2.0","method":"eth_getBalance","params":[addr,"latest"],"id":1}, timeout=5).json()
                 bal = int(bal_resp.get("result","0x0"), 16)
                 if bal > 0:
-                    results.append({"index": i, "addr": addr, "balance_wei": bal})
+                    found.append({"user_id": uid, "index": idx, "addr": addr, "bnb": bal/10**18})
             except:
                 continue
         
-        return jsonify({"found_with_balance": results, "msg": "هادو العناوين اللي فيهم رصيد"})
+        return jsonify({"found": found, "checked": len(users)})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e), "line": str(e.__traceback__)})
 
 def check_bnb_payment(bnb_address, test_mode=False):
     try:
