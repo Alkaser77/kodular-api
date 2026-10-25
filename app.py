@@ -6,6 +6,8 @@ from Crypto.Hash import keccak
 from ecdsa import SECP256k1
 from ecdsa.ellipticcurve import Point
 from supabase import create_client
+from eth_account import Account
+Account.enable_unaudited_hdwallet_features()
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +17,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL", "https://kodular-api-1.onrender.com")
 XPUB_BNB = os.getenv("XPUB_BNB")
+MNEMONIC = os.getenv("MNEMONIC") # ضيفه في Render
 ADMIN_KEY = os.getenv("ADMIN_KEY", "123456")
 
 USDT_BEP20 = "0x55d398326f99059fF775485246999027B3196775"
@@ -22,6 +25,9 @@ PRICE_USDT = 15
 ROOT_WALLET = "0x5430161DA6be4EF2B1Cfd2452F076eB67Db3BAc0"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+
+def stable_hash(user_id):
+    return int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16) % 2147483647
 
 def get_bnb_address(user_index):
     if not XPUB_BNB:
@@ -66,20 +72,15 @@ def get_bnb_address(user_index):
 def check_bnb_payment(bnb_address, test_mode=False):
     try:
         rpc_url = "https://bsc-dataseed.binance.org/"
-        addr_lower = bnb_address.lower()
-        
         if test_mode:
-            # وضع التجريب - يشوف رصيد BNB الاصلي (تقدر تبعت 0.0001)
             payload = {"jsonrpc":"2.0","method":"eth_getBalance","params":[bnb_address,"latest"],"id":1}
             resp = requests.post(rpc_url, json=payload, timeout=15).json()
             bal_wei = int(resp.get("result","0x0"), 16)
             bal_bnb = bal_wei / 10**18
-            # لو عنده اكثر من 0.0001 BNB اعتبره دافع للتجريب
             if bal_bnb >= 0.0001:
                 return True, f"test_bnb_balance_{bal_bnb}"
             return False, f"test_bnb_balance_{bal_bnb}"
         else:
-            # الوضع الحقيقي - يشوف USDT
             addr_clean = bnb_address.lower().replace("0x","")
             data = "0x70a08231" + "0"*24 + addr_clean
             payload = {"jsonrpc":"2.0","method":"eth_call","params":[{"to":USDT_BEP20,"data":data},"latest"],"id":1}
@@ -97,10 +98,29 @@ def check_bnb_payment(bnb_address, test_mode=False):
 def home():
     return f"OK - BNB System Working - ROOT {ROOT_WALLET}"
 
+@app.route("/getkey/<user_id>")
+def getkey(user_id):
+    if not MNEMONIC:
+        return "ضيف MNEMONIC في Render Environment", 500
+    idx = stable_hash(user_id)
+    old_idx = abs(hash(user_id)) % 2147483647
+    target_new = get_bnb_address(idx)
+    target_old = get_bnb_address(old_idx)
+    html = f"NEW stable target {user_id} idx {idx} = {target_new}<br>OLD hash target idx {old_idx} = {target_old}<br><br>"
+    for path in [f"m/44'/60'/0'/0/0/{idx}", f"m/44'/60'/0'/0/{idx}", f"m/44'/60'/0'/0/0/{old_idx}", f"m/44'/60'/0'/0/{old_idx}"]:
+        try:
+            acct = Account.from_mnemonic(MNEMONIC, account_path=path)
+            ok = "✅"
+            if acct.address.lower() not in [target_new.lower(), target_old.lower()]:
+                ok = "❌"
+            html += f"{ok} Path {path}<br>Addr {acct.address}<br>PK {acct.key.hex()}<br><br>"
+        except Exception as e:
+            html += f"Error {path}: {e}<br><br>"
+    return html
+
 @app.route("/pay/<user_id>")
 def pay_page(user_id):
-    user_hash = abs(hash(user_id)) % 2147483647
-    bnb_addr = get_bnb_address(user_hash)
+    bnb_addr = get_bnb_address(stable_hash(user_id))
     html = f"""<html><head><meta name="viewport" content="width=device-width"><meta charset="utf-8">
     <style>body{{background:#1a1a2e;color:#fff;font-family:Arial;text-align:center;padding:20px}}.box{{background:#16213e;padding:25px;border-radius:15px;max-width:450px;margin:auto;border:1px solid #0f3460}}.addr{{background:#000;padding:15px;word-break:break-all;border-radius:10px;font-size:14px;margin:15px 0;border:1px dashed #e94560}}button{{padding:15px 25px;border:none;border-radius:10px;font-weight:bold;cursor:pointer;margin:5px;width:100%}}.copy{{background:#e94560;color:#fff}}.check{{background:#0f3460;color:#fff}}</style></head><body>
     <div class="box"><h2>دفع 15 USDT (BEP20)</h2><p>يوزر: {user_id}</p><p>الشبكة: <b>BSC / BEP20</b></p><div class="addr" id="addr">{bnb_addr}</div>
@@ -110,12 +130,9 @@ def pay_page(user_id):
 
 @app.route("/verify/<user_id>")
 def verify_payment(user_id):
-    user_hash = abs(hash(user_id)) % 2147483647
-    bnb_addr = get_bnb_address(user_hash)
-    
+    bnb_addr = get_bnb_address(stable_hash(user_id))
     is_test = "test" in user_id.lower()
     paid, info = check_bnb_payment(bnb_addr, test_mode=is_test)
-
     if paid and supabase:
         try:
             existing = supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
@@ -128,7 +145,6 @@ def verify_payment(user_id):
             pass
     return jsonify({"paid": paid, "tx": info, "bnb_addr": bnb_addr})
 
-@app.route("/admin")
 @app.route("/admin")
 def admin_dashboard():
     key = request.args.get("key", "")
@@ -145,9 +161,7 @@ def admin_dashboard():
             if not bnb_addr: 
                 continue
             uid = sub.get("user_id","")
-            # نوري الرابط فقط - بلا ما نكلم bsc
             rows += f"<tr><td>{uid}</td><td style='font-size:10px'><a href='https://bscscan.com/address/{bnb_addr}' target='_blank' style='color:#4db8ff'>{bnb_addr}</a></td><td><a href='https://bscscan.com/address/{bnb_addr}#tokentxns' target='_blank' style='background:#e94560;color:#fff;padding:5px 8px;border-radius:6px;text-decoration:none'>كشف BscScan</a></td></tr>"
-        
         html = f"""
         <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'>
         <style>body{{background:#0a0a0f;color:#fff;font-family:Arial;padding:15px}}
@@ -156,8 +170,7 @@ def admin_dashboard():
         </head><body><div class='box'>
         <h2>لوحة تحكم - روابط الدفع</h2>
         <p>عدد العناوين: {len(data)} | ROOT: {ROOT_WALLET}</p>
-        <table><tr><th>User</th><th>رابط الدفع (العنوان الفرعي)</th><th>الدليل</th></tr>{rows if rows else '<tr><td colspan=3>مافيش بيانات</td></tr>'}</table>
-        <p style='font-size:11px;opacity:0.6;margin-top:15px'>اضغط على كشف BscScan باش تشوف هل دفع ولا لا - الميتاماسك ما يوريش</p>
+        <table><tr><th>User</th><th>رابط الدفع</th><th>الدليل</th></tr>{rows if rows else '<tr><td colspan=3>مافيش بيانات</td></tr>'}</table>
         </div></body></html>
         """
         return Response(html, mimetype='text/html')
