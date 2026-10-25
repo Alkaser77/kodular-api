@@ -7,3 +7,4 @@ ecdsa
 gunicorn
 base58
 eth-hash
+bip32utils
