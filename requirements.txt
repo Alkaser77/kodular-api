@@ -1,9 +1,6 @@
 Flask
 flask-cors
 requests
-pycryptodome
-ecdsa
-base58
 supabase
 eth-account
 gunicorn
