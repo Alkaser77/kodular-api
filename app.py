@@ -36,38 +36,47 @@ def sweep_all_old():
         if not xpub or not supabase:
             return jsonify({"error":"XPUB او SUPABASE ناقص"})
 
+        P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
+        def decompress_pub(compressed):
+            prefix = compressed[0]
+            x = int.from_bytes(compressed[1:], 'big')
+            y_sq = (pow(x,3,P) + 7) % P
+            y = pow(y_sq, (P+1)//4, P)
+            if (y % 2 == 0 and prefix == 3) or (y % 2 == 1 and prefix == 2):
+                y = P - y
+            return x, y
+
+        def compress_pub(x,y):
+            prefix = b'\x02' if y % 2 == 0 else b'\x03'
+            return prefix + x.to_bytes(32,'big')
+
         def decode_xpub(xpub_str):
             dec = base58.b58decode_check(xpub_str)
             return dec[45:78], dec[13:45]
         
-        def ckd(pub, chain, index):
-            data = pub + index.to_bytes(4,'big')
+        def ckd(pub_compressed, chain, index):
+            from ecdsa import SECP256k1
+            from ecdsa.ellipticcurve import Point
+            data = pub_compressed + index.to_bytes(4,'big')
             I = hmac.new(chain, data, hashlib.sha512).digest()
-            try:
-                from ecdsa import VerifyingKey, SECP256k1
-                il_int = int.from_bytes(I[:32],'big')
-                vk = VerifyingKey.from_string(pub[1:], curve=SECP256k1)
-                point = il_int * SECP256k1.generator + vk.pubkey.point
-                x = point.x()
-                y = point.y()
-                prefix = b'\x02' if y % 2 == 0 else b'\x03'
-                child_pub = prefix + x.to_bytes(32,'big')
-                return child_pub, I[32:]
-            except:
-                return pub, I[32:]
+            il_int = int.from_bytes(I[:32],'big')
+            x1, y1 = decompress_pub(pub_compressed)
+            parent_point = Point(SECP256k1.curve, x1, y1, SECP256k1.order)
+            child_point = il_int * SECP256k1.generator + parent_point
+            child_pub = compress_pub(child_point.x(), child_point.y())
+            return child_pub, I[32:]
         
-        def pub_to_addr(pub):
+        def pub_to_addr(pub_compressed):
             from eth_hash.auto import keccak
-            from ecdsa import VerifyingKey, SECP256k1
-            vk = VerifyingKey.from_string(pub[1:], curve=SECP256k1)
-            keccak_hash = keccak(vk.to_string())
+            x, y = decompress_pub(pub_compressed)
+            uncompressed = x.to_bytes(32,'big') + y.to_bytes(32,'big')
+            keccak_hash = keccak(uncompressed)
             return "0x" + keccak_hash[-20:].hex()
 
         def stable_hash_old(user_id):
             return int(hashlib.sha256(str(user_id).encode()).hexdigest(), 16) % 2147483647
 
-        # جيب كل المستخدمين من supabase
-        subs = supabase.table("subscriptions").select("user_id").execute()
+        subs = supabase.table("subscriptions").select("user_id").limit(500).execute()
         users = subs.data if subs.data else []
 
         pub0, chain0 = decode_xpub(xpub)
@@ -75,7 +84,7 @@ def sweep_all_old():
         
         rpc = "https://bsc-dataseed.binance.org/"
         found = []
-        for row in users[:500]: # نشوفو 500 واحد
+        for row in users:
             uid = row.get("user_id")
             idx = stable_hash_old(uid)
             p, c = ckd(pub1, chain1, idx)
@@ -85,6 +94,13 @@ def sweep_all_old():
                 bal = int(bal_resp.get("result","0x0"), 16)
                 if bal > 0:
                     found.append({"user_id": uid, "index": idx, "addr": addr, "bnb": bal/10**18})
+            except:
+                continue
+        
+        return jsonify({"found": found, "checked": len(users)})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()})
             except:
                 continue
         
