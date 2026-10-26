@@ -16,9 +16,8 @@ RPC = "https://bsc-dataseed.binance.org/"
 TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 DRIVE_NPVT_ID = os.environ.get('DRIVE_NPVT_ID', '1T8zHaaiCEf-Zkgxpz-ig5Q8_5hScsq1I')
-
 FOLDER = 'files'
-FILES = ["File.npvt", "File.ssc", "File.nm"]  # نفس اللي في مجلد files عندك
+FILES = ["File.npvt", "File.ssc", "File.nm"]
 
 def amount_for(uid):
     h = abs(hash(str(uid))) % 900 + 100
@@ -31,7 +30,9 @@ def check_payment(uid):
         latest = int(requests.post(RPC, json={"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}, timeout=10).json()["result"],16)
         padded = "0x000000000000000000000000" + ROOT_WALLET[2:].lower()
         logs = requests.post(RPC, json={"jsonrpc":"2.0","method":"eth_getLogs","params":[{"fromBlock":hex(latest-15000),"toBlock":"latest","address":USDT,"topics":[TOPIC,None,padded]}],"id":1}, timeout=15).json().get("result",[])
-        used = {x["tx_hash"] for x in supabase.table("subscriptions").select("tx_hash").execute().data if x.get("tx_hash")}
+        used = set()
+        try: used = {x["tx_hash"] for x in supabase.table("subscriptions").select("tx_hash").execute().data if x.get("tx_hash")}
+        except: pass
         for log in logs:
             if int(log["data"],16)==target and log["transactionHash"] not in used:
                 return True, log["transactionHash"], amt
@@ -44,18 +45,24 @@ def get_user(user_id):
 def save_user(user): supabase.table("users").upsert(user).execute()
 def get_remaining_hours(user):
     if not user or not user.get("expires_at"): return 0
-    expires = datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
-    return max(0, (expires - datetime.now()).total_seconds()/3600)
+    try:
+        expires = datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
+        return max(0, (expires - datetime.now()).total_seconds()/3600)
+    except: return 0
 def format_hm(hours_float):
     total_minutes=int(round(hours_float*60)); h=total_minutes//60; m=total_minutes%60
-    if h>=24: d=h//24; rh=h%24; return f"{d} days {rh}:{m:02d}"
+    if h>=24: d=h//24; rh=h%24; return f"{d} day {rh}:{m:02d}" if d==1 else f"{d} days {rh}:{m:02d}"
     return f"{h}:{m:02d}"
 
-PAY_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الدفع</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md bg-[#1e1e35] rounded-[24px] p-6 border border-white/10 text-center"><h1 class="text-xl font-bold text-white">انتهى وقتك المجاني</h1><p id="amt" class="text-3xl font-bold text-emerald-400 mt-4">-- USDT</p><div class="bg-black/40 p-3 rounded-xl font-mono text-[11px] break-all mt-3 text-white text-left">__WALLET__</div><button onclick="verify()" id="btn" class="w-full bg-emerald-500 text-black py-4 rounded-xl font-bold mt-4">لقد دفعت</button><div id="status" class="mt-3 text-white"></div></div><script>let AMT=0,UID="__UID__";async function init(){let r=await fetch(`/amount/${UID}`).then(x=>x.json());AMT=r.amount;document.getElementById('amt').innerText=AMT+' USDT';}async function verify(){let b=document.getElementById('btn');b.innerHTML="⏳...";let r=await fetch(`/verify/${UID}`).then(x=>x.json());if(r.paid){document.getElementById('status').innerText="✅ تم";setTimeout(()=>location.href=`/content/${UID}`,1000);}else{document.getElementById('status').innerText="❌ لم نجد "+r.amount;b.innerHTML="لقد دفعت";}}init();</script></body></html>"""
-CONTENT_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبتي</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] min-h-screen p-4"><div class="max-w-3xl mx-auto"><h1 class="text-xl font-bold text-white mb-6">📁 مكتبتك __UID__ - <span id="time"></span></h1><div id="list"></div></div><script>const UID="__UID__";async function load(){let c=await fetch(`/check?user_id=${UID}`).then(r=>r.json());document.getElementById('time').innerText=c.hours||'';if(c.status!=='active'){document.getElementById('list').innerHTML=`<div class='bg-[#1e1e35] p-6 rounded-2xl text-center'><p class='text-white'>${c.message||'انتهى'}</p><a href='/pay/${UID}' class='mt-4 inline-block bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold'>ادفع</a></div>`;return;}let h="";c.files.forEach(f=>{let src=f==='File.npvt'?'Drive':'من مجلد files';h+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center mb-3'><div><p class='text-white font-bold'>${f}</p><p class='text-xs text-gray-400'>${src}</p></div><button onclick="location.href='/download/${f}?user_id=${UID}'" class='bg-white text-black px-4 py-2 rounded-xl font-bold'>تحميل</button></div>`});document.getElementById('list').innerHTML=h;}load();</script></body></html>"""
+# ====== لوحة جديدة + صفحات جديدة ======
+PAY_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>الدفع الآمن</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"><style>@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');*{font-family:'Tajawal',sans-serif}</style></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md"><div class="bg-gradient-to-b from-[#1e1e35] to-[#151528] rounded-[24px] p-6 border border-white/10 shadow-2xl"><div class="text-center mb-6"><div class="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-shield-halved text-2xl text-white"></i></div><h1 class="text-xl font-bold text-white">الدفع الآمن</h1><p class="text-gray-400 text-sm mt-1">BSC BEP20 • تأكيد تلقائي</p></div><div class="bg-black/40 rounded-2xl p-4 border border-white/5 mb-4"><div class="flex justify-between text-sm text-gray-400 mb-2"><span>المبلغ المطلوب</span><span class="text-yellow-400">مميز لك</span></div><div id="amt" class="text-3xl font-bold text-emerald-400 text-center">-- USDT</div></div><div class="bg-black/40 rounded-2xl p-4 border border-white/5 mb-4"><p class="text-xs text-gray-400 mb-2">عنوان المحفظة</p><div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all border border-white/10 text-left text-white">__WALLET__</div><div class="grid grid-cols-2 gap-2 mt-3"><button onclick="navigator.clipboard.writeText('__WALLET__')" class="bg-white text-black py-3 rounded-xl font-bold text-sm">نسخ العنوان</button><button onclick="navigator.clipboard.writeText(AMT)" class="bg-white/10 text-white border border-white/10 py-3 rounded-xl font-bold text-sm">نسخ المبلغ</button></div></div><button onclick="verify()" id="btn" class="w-full bg-gradient-to-r from-emerald-500 to-green-500 text-black py-4 rounded-xl font-bold">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm min-h-[24px] text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div><script>let AMT=0,UID="__UID__";async function init(){let r=await fetch(`/amount/${UID}`).then(x=>x.json());AMT=r.amount;document.getElementById('amt').innerText=AMT+' USDT';document.getElementById('toContent').href=`/content/${UID}`;}async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch(`/verify/${UID}`).then(x=>x.json());if(r.paid){s.innerHTML="<span class='text-emerald-400 font-bold'>✅ تم التفعيل - 30 يوم</span>";setTimeout(()=>location.href=`/content/${UID}`,1500);}else{s.innerHTML=`<span class='text-red-400'>❌ لم نجد ${r.amount}</span>`;b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}init();</script></body></html>"""
+
+CONTENT_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبتي</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] min-h-screen p-4"><div class="max-w-3xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-xl font-bold text-white">📁 مكتبتك - __UID__</h1><span id="time" class="bg-[#1e1e35] px-3 py-1 rounded-full text-xs text-white"></span></div><div id="list" class="space-y-3"></div></div><script>const UID="__UID__";async function load(){let c=await fetch(`/check?user_id=${UID}`).then(r=>r.json());document.getElementById('time').innerText=c.hours||'';if(c.status!=='active'){document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-white/10'><p class='text-white'>${c.message||'انتهى وقتك'}</p><a href='/pay/${UID}' class='mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-bold'>💳 ادفع للتجديد 30 يوم</a></div>`;return;}let h="";c.files.forEach(f=>{let src=f==='File.npvt'?'Drive - ملف واحد':'من files/ داخل GitHub';h+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center'><div><p class='font-bold text-white'>${f}</p><p class='text-xs text-gray-400'>${src}</p></div><button onclick="location.href='/download/${f}?user_id=${UID}'" class='bg-white text-black px-4 py-2 rounded-xl text-sm font-bold'>تحميل</button></div>`;});document.getElementById('list').innerHTML=h;}load();</script></body></html>"""
+
+ADMIN_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Pro MAX</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] text-white min-h-screen p-4"><div class="max-w-7xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-2xl font-bold">لوحة التحكم <span class="text-emerald-400">Pro MAX</span> <span class="text-xs text-gray-500">• Drive + files/</span></h1><button onclick="load()" class="bg-emerald-500 text-black px-4 py-2 rounded-xl text-sm font-bold">تحديث</button></div><div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"><div class="bg-emerald-900/40 p-5 rounded-2xl"><p class="text-gray-400 text-xs">النشطين</p><p id="active" class="text-3xl font-bold">--</p></div><div class="bg-[#1a1a2e] p-5 rounded-2xl"><p class="text-gray-400 text-xs">الكل</p><p id="total" class="text-3xl font-bold">--</p></div><div class="bg-[#1a1a2e] p-5 rounded-2xl"><p class="text-gray-400 text-xs">منتهي</p><p id="exp" class="text-3xl font-bold text-red-400">--</p></div><div class="bg-yellow-900/30 p-5 rounded-2xl"><p class="text-gray-400 text-xs">الارباح</p><p id="rev" class="text-xl font-bold text-yellow-400">--</p></div></div><div class="bg-[#12121f] rounded-2xl border border-white/5 overflow-hidden"><div class="p-4 flex justify-between"><h3 class="font-bold">المستخدمين - القديم + دفع</h3><input id="search" oninput="filter()" placeholder="بحث بالـ ID..." class="bg-black/50 border border-white/10 rounded-lg px-3 py-1 text-xs w-48"></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="text-gray-500 bg-black/30"><tr><th class="p-3 text-right">User</th><th class="p-3">متبقي</th><th class="p-3">المبلغ</th><th class="p-3">الحالة</th><th class="p-3 min-w-[500px]">تحكم Pro MAX</th></tr></thead><tbody id="tb"></tbody></table></div></div></div><script>const KEY=new URLSearchParams(location.search).get("key");let ALL=[];async function load(){let s=await fetch(`/admin/stats?key=${KEY}`).then(r=>r.json());document.getElementById('active').innerText=s.active_users;document.getElementById('total').innerText=s.total_users;document.getElementById('exp').innerText=s.expired;document.getElementById('rev').innerText=s.total_revenue+" USDT";let u=await fetch(`/admin/users?key=${KEY}`).then(r=>r.json());ALL=u;render(u);}function render(list){let h="";list.forEach(x=>{let d=new Date(x.expire_at);let isTime=d>new Date();let status = !x.is_paid ? '<span class="bg-orange-900/50 text-orange-300 px-2 py-1 rounded-full text-xs">⏸️ معطل</span>' : isTime ? '<span class="bg-emerald-900/50 text-emerald-300 px-2 py-1 rounded-full text-xs">✅ نشط</span>' : '<span class="bg-red-900/50 text-red-300 px-2 py-1 rounded-full text-xs">❌ منتهي</span>';h+=`<tr class='border-b border-white/5'><td class='p-3 font-mono text-xs'><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='text-cyan-400 underline'>${x.user_id} ↗</a></td><td class='p-3 text-xs'>${x.remaining||''}</td><td class='p-3 text-emerald-400'>${x.amount_paid||0}</td><td class='p-3'>${status}</td><td class='p-2 flex gap-1 flex-wrap'><input id='d_${x.user_id}' type='number' value='30' class='bg-black border border-white/20 rounded-lg w-14 px-2 py-1.5 text-xs text-center text-white'><button onclick="extCustom('${x.user_id}')" class='bg-white text-black px-2 py-1.5 rounded-lg text-xs font-bold'>+ اضافة</button><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='bg-blue-900/40 text-blue-300 px-2 py-1.5 rounded-lg text-xs'>👁️ فتح</a><a href='/content/${x.user_id}' target='_blank' class='bg-purple-900/40 text-purple-300 px-2 py-1.5 rounded-lg text-xs'>📁 محتوى</a><a href='/pay/${x.user_id}' target='_blank' class='bg-emerald-900/40 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>💳 دفع</a><button onclick="resetU('${x.user_id}')" class='bg-gray-700 px-2 py-1.5 rounded-lg text-xs'>تصفير 2س</button><button onclick="del('${x.user_id}')" class='bg-red-900/50 text-red-300 px-2 py-1.5 rounded-lg text-xs'>حذف</button></td></tr>`});document.getElementById('tb').innerHTML=h}function filter(){let q=document.getElementById('search').value;render(ALL.filter(x=>x.user_id.toLowerCase().includes(q.toLowerCase())))}async function del(uid){if(!confirm(uid))return;await fetch(`/admin/delete?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});load();}async function resetU(uid){await fetch(`/admin/reset?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});load();}async function extCustom(uid){let days=parseInt(document.getElementById('d_'+uid).value)||0;await fetch(`/admin/extend?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});load();}load();</script></body></html>"""
 
 @app.route('/')
-def home(): return "OK", 200
+def home(): return "OK - New Admin + Old Files", 200
 @app.route('/pay/<user_id>')
 def pay_page(user_id): return Response(PAY_HTML.replace("__WALLET__", ROOT_WALLET).replace("__UID__", user_id), mimetype='text/html')
 @app.route('/content/<user_id>')
@@ -101,7 +108,7 @@ def check():
         else:
             remaining_cooldown = 24 - hours_since_expire
             save_user(user)
-            return jsonify({"status": "cooldown", "message": f"انتظر {format_hm(remaining_cooldown)} او ادفع", "hours": format_hm(remaining_cooldown), "files": FILES, "pay_url": f"/pay/{user_id}", "content_url": f"/content/{user_id}"})
+            return jsonify({"status": "cooldown", "message": f"انتهى - انتظر {format_hm(remaining_cooldown)} او ادفع", "hours": format_hm(remaining_cooldown), "files": FILES, "pay_url": f"/pay/{user_id}", "content_url": f"/content/{user_id}"})
     return jsonify({"status": "active", "links": links, "files": FILES, "hours": format_hm(remaining), "content_url": f"/content/{user_id}", "pay_url": f"/pay/{user_id}"})
 
 @app.route('/download/<filename>')
@@ -111,37 +118,83 @@ def download(filename):
     user = get_user(user_id)
     if get_remaining_hours(user) <= 0: return redirect(f"/pay/{user_id}")
     if filename not in FILES: return f"File {filename} not allowed", 403
-
-    # 1- الوحيد من Drive
     if filename == "File.npvt":
         gdrive_url = f"https://drive.google.com/uc?export=download&id={DRIVE_NPVT_ID}"
         r = requests.get(gdrive_url, stream=True, timeout=30)
         return Response(r.iter_content(chunk_size=8192), mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
-
-    # 2- الباقي من مجلد files اللي في GitHub (اللي في الصورة عندك)
     file_path = os.path.join(FOLDER, filename)
-    if not os.path.exists(file_path): return f"File {filename} not found in repo/files - تأكد رافعه في GitHub", 404
+    if not os.path.exists(file_path): return f"File {filename} not found in repo/files", 404
     with open(file_path, 'rb') as f: data = f.read()
     return Response(data, mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
 
-@app.route('/admin', methods=['GET'])
-def admin_panel():
-    key = request.args.get('key')
-    if key!= ADMIN_KEY: return "<h3 style='color:red'>كلمة سر غلط</h3>", 401
-    now=datetime.now()
-    if request.args.get('action')=='ban':
-        supabase.table("users").delete().eq("user_id", request.args.get('user_id')).execute()
-        return redirect(f"/admin?key={ADMIN_KEY}")
-    if request.args.get('action')=='reset':
-        user=get_user(request.args.get('user_id'))
-        if user: user["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
-        return redirect(f"/admin?key={ADMIN_KEY}")
-    all_users=supabase.table("users").select("*").order("expires_at",desc=True).execute().data
-    html=f"<html dir='rtl'><head><meta charset='utf-8'><script src='https://cdn.tailwindcss.com'></script></head><body class='bg-[#080810] text-white p-6'><div class='max-w-5xl mx-auto bg-[#12121f] rounded-2xl p-6'><h2 class='text-center font-bold text-xl'>لوحة التحكم - القديم + دفع</h2><p class='text-center text-sm text-gray-400 mt-2'>File.npvt من Drive - الباقي من files/ في GitHub</p><table class='w-full mt-6 text-sm'><tr class='bg-[#1e1e35]'><th class='p-2'>ID</th><th>متبقي</th><th>تحكم</th></tr>"
-    for u in all_users:
-        html+=f"<tr class='border-b border-white/5'><td class='p-2 font-mono'><a href='/content/{u['user_id']}' target='_blank' class='text-cyan-300'>{u['user_id']}</a></td><td class='p-2'>{format_hm(get_remaining_hours(u))}</td><td class='p-2'><a href='/admin?key={ADMIN_KEY}&action=reset&user_id={u['user_id']}' class='bg-gray-600 px-2 py-1 rounded'>تصفير</a> <a href='/pay/{u['user_id']}' target='_blank' class='bg-emerald-500 text-black px-2 py-1 rounded'>دفع</a> <a href='/admin?key={ADMIN_KEY}&action=ban&user_id={u['user_id']}' class='bg-red-600 px-2 py-1 rounded'>حذف</a></td></tr>"
-    html+="</table></div></body></html>"
-    return html
+# ===== Admin Pro MAX الجديد + القديم =====
+@app.route("/admin")
+def admin():
+    if request.args.get("key")!=ADMIN_KEY: return Response("401 ?key=",401)
+    return Response(ADMIN_HTML, mimetype='text/html')
+
+@app.route("/admin/stats")
+def a_stats():
+    if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
+    users = supabase.table("users").select("*").execute().data
+    active = sum(1 for u in users if get_remaining_hours(u)>0)
+    try: subs = supabase.table("subscriptions").select("*").execute().data; rev = sum(float(s.get("amount_paid",0) or 0) for s in subs)
+    except: rev=0; subs=[]
+    return jsonify({"total_users":len(users),"active_users":active,"expired":len(users)-active,"total_revenue":round(rev,4)})
+
+@app.route("/admin/users")
+def a_users():
+    if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
+    users = supabase.table("users").select("*").order("expires_at",desc=True).limit(200).execute().data
+    out=[]
+    for u in users:
+        rem = get_remaining_hours(u)
+        amt=0
+        try:
+            r=supabase.table("subscriptions").select("*").eq("user_id",u["user_id"]).execute()
+            if r.data: amt=r.data[0].get("amount_paid",0)
+        except: pass
+        out.append({"user_id":u["user_id"],"expire_at":u["expires_at"],"remaining":format_hm(rem),"amount_paid":amt,"is_paid":rem>0})
+    return jsonify(out)
+
+@app.route("/admin/delete", methods=["POST"])
+def a_del():
+    if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
+    uid=request.json.get("user_id")
+    supabase.table("users").delete().eq("user_id", uid).execute()
+    try: supabase.table("subscriptions").delete().eq("user_id", uid).execute()
+    except: pass
+    return jsonify({"ok":True})
+
+@app.route("/admin/reset", methods=["POST"])
+def a_reset():
+    if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
+    uid=request.json.get("user_id"); now=datetime.now()
+    user=get_user(uid)
+    if user: user["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
+    return jsonify({"ok":True})
+
+@app.route("/admin/extend", methods=["POST"])
+def a_ext():
+    if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
+    uid=request.json.get("user_id"); days=int(request.json.get("days",30))
+    user=get_user(uid)
+    if not user: return jsonify({"error":"not found"}),404
+    try: old=datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
+    except: old=datetime.now()
+    if old<datetime.now(): old=datetime.now()
+    new_exp=old+timedelta(days=days)
+    user["expires_at"]=new_exp.strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
+    return jsonify({"ok":True})
+
+@app.route("/admin/view/<user_id>")
+def a_view(user_id):
+    if request.args.get("key")!=ADMIN_KEY: return Response("401",401)
+    u=get_user(user_id)
+    if not u: return Response(f"<body style='background:#080810;color:white;padding:20px'><h1>{user_id} مش موجود</h1></body>",404)
+    rem=format_hm(get_remaining_hours(u))
+    html=f"""<html dir='rtl'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><script src='https://cdn.tailwindcss.com'></script></head><body class='bg-[#080810] text-white p-6'><div class='max-w-lg mx-auto bg-[#12121f] rounded-2xl p-6 border border-white/10'><h1 class='text-xl font-bold mb-4'>👤 {user_id}</h1><p>متبقي: {rem}</p><p class='text-xs text-gray-400 mt-2'>File.npvt من Drive • الباقي من files/</p><div class='mt-6 grid grid-cols-2 gap-2'><a href='/pay/{user_id}' target='_blank' class='bg-emerald-500 text-black py-3 rounded-xl text-center font-bold'>💳 دفع</a><a href='/content/{user_id}' target='_blank' class='bg-purple-600 text-white py-3 rounded-xl text-center font-bold'>📁 محتوى</a></div></div></body></html>"""
+    return Response(html,mimetype='text/html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
