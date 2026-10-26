@@ -57,21 +57,15 @@ const UID="__UID__";
 async function load(){
   let c=await fetch(`/check?user_id=${UID}`).then(r=>r.json());
   document.getElementById('time').innerText=c.hours||'';
-  // 1- معطل من الادارة
   if(c.status==='disabled'){
-    document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-red-500/20'><p class='text-red-400 font-bold text-lg'>🚫 ${c.message||'تم تعطيل حسابك من الادارة'}</p><p class='text-gray-400 text-xs mt-2'>تواصل مع الادارة</p><div class='mt-4 opacity-30 pointer-events-none'><p class='text-white text-sm'>الملفات غير متاحة</p></div></div>`;
+    document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-red-500/20'><p class='text-red-400 font-bold text-lg'>🚫 ${c.message||'تم تعطيل حسابك'}</p><div class='mt-4 opacity-30 pointer-events-none'><p class='text-white text-sm'>الملفات غير متاحة</p></div></div>`;
     return;
   }
-  // 2- منتهي او كولداون - اعرض شفاف ومعطل
   if(c.status!=='active'){
-    let filesHtml="";
-    (c.files||[]).forEach(f=>{
-      filesHtml+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center opacity-30 pointer-events-none'><div><p class='font-bold text-white'>${f}</p><p class='text-xs text-gray-500'>مقفل</p></div><button disabled class='bg-gray-700 text-gray-400 px-4 py-2 rounded-xl text-sm font-bold'>مقفل 🔒</button></div>`;
-    });
+    let filesHtml="";(c.files||[]).forEach(f=>{filesHtml+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center opacity-30 pointer-events-none'><div><p class='font-bold text-white'>${f}</p><p class='text-xs text-gray-500'>مقفل</p></div><button disabled class='bg-gray-700 text-gray-400 px-4 py-2 rounded-xl text-sm'>مقفل 🔒</button></div>`;});
     document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-white/10 mb-4'><p class='text-white'>${c.message||'انتهى وقتك'}</p><a href='/pay/${UID}' class='mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-bold'>💳 ادفع للتجديد 30 يوم</a><p class='text-xs text-gray-500 mt-2'>${c.hours||''}</p></div>`+filesHtml;
     return;
   }
-  // 3- نشط
   let h="";c.files.forEach(f=>{h+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center'><div><p class='font-bold text-white'>${f}</p></div><button onclick="location.href='/download/${f}?user_id=${UID}'" class='bg-white text-black px-4 py-2 rounded-xl text-sm font-bold'>تحميل</button></div>`;});
   document.getElementById('list').innerHTML=h;
 }
@@ -80,11 +74,11 @@ load();
 
 ADMIN_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Pro MAX</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] text-white min-h-screen p-4">
 <div id="toast" class="fixed top-4 right-4 z-50 hidden"><div id="toastBox" class="bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 text-sm"><span id="toastText"></span></div></div>
-<div class="max-w-7xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-2xl font-bold">لوحة التحكم <span class="text-emerald-400">Pro MAX</span> <span class="text-xs text-gray-500">Fix Disable</span></h1><button onclick="load()" class="bg-emerald-500 text-black px-4 py-2 rounded-xl text-sm font-bold">تحديث</button></div>
+<div class="max-w-7xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-2xl font-bold">لوحة التحكم <span class="text-emerald-400">Pro MAX</span></h1><button onclick="load()" class="bg-emerald-500 text-black px-4 py-2 rounded-xl text-sm font-bold">تحديث</button></div>
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"><div class="bg-emerald-900/40 p-5 rounded-2xl"><p class="text-gray-400 text-xs">النشطين</p><p id="active" class="text-3xl font-bold">--</p></div><div class="bg-[#1a1a2e] p-5 rounded-2xl"><p class="text-gray-400 text-xs">الكل</p><p id="total" class="text-3xl font-bold">--</p></div><div class="bg-[#1a1a2e] p-5 rounded-2xl"><p class="text-gray-400 text-xs">منتهي</p><p id="exp" class="text-3xl font-bold text-red-400">--</p></div><div class="bg-yellow-900/30 p-5 rounded-2xl"><p class="text-gray-400 text-xs">الارباح</p><p id="rev" class="text-xl font-bold text-yellow-400">--</p></div></div>
 <div class="bg-[#12121f] rounded-2xl border border-white/5 overflow-hidden">
 <div class="p-4 bg-black/30 border-b border-white/5 flex flex-wrap gap-3 items-end">
-<div><label class="text-[11px] text-gray-400">اضافة يوزر جديد</label><div class="flex gap-2 mt-1"><input id="newUid" placeholder="USER_ID" class="bg-black border border-white/20 rounded-lg px-3 py-2 text-xs w-36 text-white"><input id="newDays" type="number" value="0" class="bg-black border border-white/20 rounded-lg px-2 py-2 text-xs w-16 text-center text-white"><span class="text-[11px] text-gray-500 py-2">يوم (0=2س)</span><button onclick="addUser()" class="bg-emerald-500 text-black px-4 py-2 rounded-lg text-xs font-bold">+ اضافة يوزر</button></div></div>
+<div><label class="text-[11px] text-gray-400">اضافة يوزر جديد</label><div class="flex gap-2 mt-1"><input id="newUid" placeholder="USER_ID" class="bg-black border border-white/20 rounded-lg px-3 py-2 text-xs w-36 text-white"><input id="newDays" type="number" value="30" class="bg-black border border-white/20 rounded-lg px-2 py-2 text-xs w-20 text-center text-white"><button onclick="addUser()" class="bg-emerald-500 text-black px-4 py-2 rounded-lg text-xs font-bold">+ اضافة يوزر</button></div></div>
 <div class="mr-auto"><input id="search" oninput="filter()" placeholder="بحث..." class="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs w-48"></div>
 </div>
 <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="text-gray-500 bg-black/30"><tr><th class="p-3 text-right">User</th><th class="p-3">متبقي</th><th class="p-3">المبلغ</th><th class="p-3">الحالة</th><th class="p-3 min-w-[650px]">تحكم</th></tr></thead><tbody id="tb"></tbody></table></div></div></div>
@@ -101,18 +95,18 @@ function render(list){let h="";list.forEach(x=>{
   let isActive = x.is_paid;
   let status = x.raw_status==='inactive' ? '<span class="bg-orange-900/50 text-orange-300 px-2 py-1 rounded-full text-xs">⏸️ معطل</span>' : isActive ? '<span class="bg-emerald-900/50 text-emerald-300 px-2 py-1 rounded-full text-xs">✅ نشط</span>' : '<span class="bg-red-900/50 text-red-300 px-2 py-1 rounded-full text-xs">❌ منتهي</span>';
   let toggleBtn = x.raw_status==='inactive' ? `<button onclick="toggleUser('${x.user_id}')" class='bg-emerald-900/50 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>🟢 تنشيط</button>` : `<button onclick="toggleUser('${x.user_id}')" class='bg-orange-900/50 text-orange-300 px-2 py-1.5 rounded-lg text-xs'>🔴 تعطيل</button>`;
-  h+=`<tr class='border-b border-white/5'><td class='p-3 font-mono text-xs'><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='text-cyan-400 underline'>${x.user_id} ↗</a></td><td class='p-3 text-xs'>${x.remaining||''}</td><td class='p-3 text-emerald-400'>${x.amount_paid||0}</td><td class='p-3'>${status}</td><td class='p-2 flex gap-1 flex-wrap'>${toggleBtn}<input id='d_${x.user_id}' type='number' value='30' class='bg-black border border-white/20 rounded-lg w-14 px-2 py-1.5 text-xs text-center text-white'><button onclick="extCustom('${x.user_id}')" class='bg-white text-black px-2 py-1.5 rounded-lg text-xs font-bold'>+ اضافة</button><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='bg-blue-900/40 text-blue-300 px-2 py-1.5 rounded-lg text-xs'>👁️ فتح</a><a href='/content/${x.user_id}' target='_blank' class='bg-purple-900/40 text-purple-300 px-2 py-1.5 rounded-lg text-xs'>📁 محتوى</a><a href='/pay/${x.user_id}' target='_blank' class='bg-emerald-900/40 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>💳 دفع</a><button onclick="resetU('${x.user_id}')" class='bg-gray-700 px-2 py-1.5 rounded-lg text-xs'>تصفير 2س</button><button onclick="del('${x.user_id}')" class='bg-red-900/50 text-red-300 px-2 py-1.5 rounded-lg text-xs'>حذف</button></td></tr>`});document.getElementById('tb').innerHTML=h}
+  h+=`<tr class='border-b border-white/5'><td class='p-3 font-mono text-xs'><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='text-cyan-400 underline'>${x.user_id} ↗</a></td><td class='p-3 text-xs'>${x.remaining||''}</td><td class='p-3 text-emerald-400'>${x.amount_paid||0}</td><td class='p-3'>${status}</td><td class='p-2 flex gap-1 flex-wrap'>${toggleBtn}<input id='d_${x.user_id}' type='number' value='30' class='bg-black border border-white/20 rounded-lg w-14 px-2 py-1.5 text-xs text-center text-white'><button onclick="extCustom('${x.user_id}')" class='bg-white text-black px-2 py-1.5 rounded-lg text-xs font-bold'>+ اضافة</button><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='bg-blue-900/40 text-blue-300 px-2 py-1.5 rounded-lg text-xs'>👁️ فتح</a><a href='/content/${x.user_id}' target='_blank' class='bg-purple-900/40 text-purple-300 px-2 py-1.5 rounded-lg text-xs'>📁 محتوى</a><a href='/pay/${x.user_id}' target='_blank' class='bg-emerald-900/40 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>💳 دفع</a><button onclick="resetU('${x.user_id}')" class='bg-gray-700 px-2 py-1.5 rounded-lg text-xs'>تصفير 0</button><button onclick="del('${x.user_id}')" class='bg-red-900/50 text-red-300 px-2 py-1.5 rounded-lg text-xs'>حذف</button></td></tr>`});document.getElementById('tb').innerHTML=h}
 function filter(){let q=document.getElementById('search').value;render(ALL.filter(x=>x.user_id.toLowerCase().includes(q.toLowerCase())))}
-async function addUser(){let uid=document.getElementById('newUid').value.trim();let days=parseInt(document.getElementById('newDays').value)||0;if(!uid){showToast('اكتب الـ ID','red');return;}let r=await fetch(`/admin/add_user?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});let j=await r.json();if(j.ok){showToast('✅ تم اضافة '+uid+' '+(days>0?days+' يوم':'ساعتين'),'emerald');document.getElementById('newUid').value='';load();}else{showToast(j.error||'موجود','red');}}
+async function addUser(){let uid=document.getElementById('newUid').value.trim();let days=parseInt(document.getElementById('newDays').value)||0;if(!uid){showToast('اكتب الـ ID','red');return;}let r=await fetch(`/admin/add_user?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});let j=await r.json();if(j.ok){showToast('✅ تم اضافة '+uid+' '+(days>0?days+' يوم':'0 يوم'),'emerald');document.getElementById('newUid').value='';load();}else{showToast(j.error||'موجود','red');}}
 async function del(uid){if(!confirm('حذف '+uid+' ?'))return;await fetch(`/admin/delete?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🗑️ تم حذف '+uid,'red');load();}
-async function resetU(uid){await fetch(`/admin/reset?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🔄 تم تصفير '+uid+' ساعتين','blue');load();}
+async function resetU(uid){await fetch(`/admin/reset?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🔄 تم تصفير '+uid+' = 0','blue');load();}
 async function extCustom(uid){let days=parseInt(document.getElementById('d_'+uid).value)||0;if(days<=0){showToast('اكتب عدد الايام','red');return;}await fetch(`/admin/extend?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});showToast('✅ تم اضافة '+days+' يوم لـ '+uid,'emerald');load();}
 async function toggleUser(uid){let r=await fetch(`/admin/toggle?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});let j=await r.json();if(j.action==='enabled') showToast('✅ تم تنشيط '+uid+' 30 يوم','emerald'); else showToast('⏸️ تم تعطيل '+uid,'red');load();}
 load();
 </script></body></html>"""
 
 @app.route('/')
-def home(): return "OK - Fix Disable + 2h logic", 200
+def home(): return "OK - Final Fix 0 + Custom Days", 200
 @app.route('/pay/<user_id>')
 def pay_page(user_id): return Response(PAY_HTML.replace("__WALLET__", ROOT_WALLET).replace("__UID__", user_id), mimetype='text/html')
 @app.route('/content/<user_id>')
@@ -147,14 +141,12 @@ def check():
         user = {"user_id": user_id, "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S"), "status": "active"}
         save_user(user)
         return jsonify({"status": "active", "links": links, "files": FILES, "hours": "2:00", "content_url": f"/content/{user_id}", "pay_url": f"/pay/{user_id}"})
-    # معطل من الادارة - اهم شي
     if user.get("status")=="inactive":
         return jsonify({"status": "disabled", "message": "تم تعطيل حسابك من الادارة", "hours": "معطل", "files": FILES, "pay_url": f"/pay/{user_id}", "content_url": f"/content/{user_id}"})
     remaining = get_remaining_hours(user)
     if remaining <= 0:
         last_expire = datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
         hours_since_expire = (now - last_expire).total_seconds() / 3600
-        # لو منتهي عادي اعطيه ساعتين بعد 24 ساعة، بس لو معطل لا
         if hours_since_expire >= 24:
             new_expire = now + timedelta(hours=2)
             user["expires_at"] = new_expire.strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
@@ -222,7 +214,7 @@ def a_add_user():
     if not uid: return jsonify({"error":"اكتب ID"}),400
     if get_user(uid): return jsonify({"error":"موجود مسبقا"}),400
     if days>0: exp=datetime.now()+timedelta(days=days)
-    else: exp=datetime.now()+timedelta(hours=2)
+    else: exp=datetime.now()
     user={"user_id":uid,"expires_at":exp.strftime("%Y-%m-%d %H:%M:%S"),"status":"active"}
     save_user(user)
     return jsonify({"ok":True})
@@ -239,9 +231,12 @@ def a_del():
 @app.route("/admin/reset", methods=["POST"])
 def a_reset():
     if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
-    uid=request.json.get("user_id"); now=datetime.now()
+    uid=request.json.get("user_id")
     user=get_user(uid)
-    if user: user["expires_at"]=(now+timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
+    if user:
+        user["expires_at"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user["status"]="active"
+        save_user(user)
     return jsonify({"ok":True})
 
 @app.route("/admin/extend", methods=["POST"])
