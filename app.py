@@ -14,7 +14,7 @@ RPC = "https://bsc-dataseed.binance.org/"
 TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 DRIVE_NPVT_ID = os.environ.get('DRIVE_NPVT_ID', '1T8zHaaiCEf-Zkgxpz-ig5Q8_5hScsq1I')
 FOLDER = 'files'
-FILES = ["File.npvt", "File.ssc", "File.nm"]
+FILES = ["File.npvt", "File.ssc", "File.nm", "File.hc", "File.ehi", "File.npvs", "File.v2box"]
 
 def amount_for(uid):
     h = abs(hash(str(uid))) % 900 + 100
