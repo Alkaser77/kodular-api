@@ -18,9 +18,11 @@ FILES = ["File.npvt", "File.ssc", "File.nm", "File.hc", "File.ehi", "File.npvs",
 
 def amount_for(uid):
     h = abs(hash(str(uid))) % 900 + 100
-    return round(15 + h/10000, 4)
+    return round(1 + h/10000, 4)
+
 def check_payment(uid):
-    amt = amount_for(uid); target = int(amt * 10**18)
+    amt = amount_for(uid)
+    target = int(amt * 10**18)
     try:
         latest = int(requests.post(RPC, json={"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}, timeout=10).json()["result"],16)
         padded = "0x000000000000000000000000" + ROOT_WALLET[2:].lower()
@@ -29,10 +31,12 @@ def check_payment(uid):
         try: used = {x["tx_hash"] for x in supabase.table("subscriptions").select("tx_hash").execute().data if x.get("tx_hash")}
         except: pass
         for log in logs:
-            if int(log["data"],16)==target and log["transactionHash"] not in used:
+            paid = int(log["data"],16)
+            if paid >= target and log["transactionHash"] not in used:
                 return True, log["transactionHash"], amt
         return False, "no", amt
     except Exception as e: return False, str(e), amt
+
 def get_user(user_id):
     res = supabase.table("users").select("*").eq("user_id", user_id).execute()
     return res.data[0] if res.data else None
@@ -51,31 +55,14 @@ def format_hm(hours_float):
 
 PAY_HTML = """<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>الدفع الآمن</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"><style>@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');*{font-family:'Tajawal',sans-serif}#toast-copy{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;transition:all 0.3s}</style></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4">
 <div id="toast-copy" class="hidden"><div id="toastCopyBox" class="bg-white text-black px-6 py-3 rounded-full font-bold shadow-2xl text-sm">✅ تم النسخ</div></div>
-<div class="w-full max-w-md"><div class="bg-gradient-to-b from-[#1e1e35] to-[#151528] rounded-[24px] p-6 border border-white/10 shadow-2xl"><div class="text-center mb-6"><div class="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-shield-halved text-2xl text-white"></i></div><h1 class="text-xl font-bold text-white">الدفع الآمن</h1><p class="text-gray-400 text-sm mt-1">BSC BEP20 • تأكيد تلقائي</p></div><div class="bg-black/40 rounded-2xl p-4 border border-white/5 mb-4"><div class="flex justify-between text-sm text-gray-400 mb-2"><span>المبلغ المطلوب</span><span class="text-yellow-400">مميز لك</span></div><div id="amt" class="text-3xl font-bold text-emerald-400 text-center">-- USDT</div></div><div class="bg-black/40 rounded-2xl p-4 border border-white/5 mb-4"><p class="text-xs text-gray-400 mb-2">عنوان المحفظة</p><div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all border border-white/10 text-left text-white">__WALLET__</div><div class="grid grid-cols-2 gap-2 mt-3"><button onclick="copyText('__WALLET__','العنوان')" class="bg-white text-black py-3 rounded-xl font-bold text-sm">نسخ العنوان</button><button onclick="copyText(AMT+'','المبلغ')" class="bg-white/10 text-white border border-white/10 py-3 rounded-xl font-bold text-sm">نسخ المبلغ</button></div></div><button onclick="verify()" id="btn" class="w-full bg-gradient-to-r from-emerald-500 to-green-500 text-black py-4 rounded-xl font-bold">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm min-h-[24px] text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div>
+<div class="w-full max-w-md"><div class="bg-gradient-to-b from-[#1e1e35] to-[#151528] rounded-[24px] p-6 border border-white/10 shadow-2xl"><div class="text-center mb-6"><div class="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-shield-halved text-2xl text-white"></i></div><h1 class="text-xl font-bold text-white">الدفع الآمن</h1><p class="text-gray-400 text-sm mt-1">BSC BEP20 • تأكيد تلقائي</p></div><div class="bg-black/40 rounded-2xl p-4 border border-white/5 mb-4"><div class="flex justify-between text-sm text-gray-400 mb-2"><span>المبلغ المطلوب</span><span class="text-yellow-400">الحد الأدنى</span></div><div id="amt" class="text-3xl font-bold text-emerald-400 text-center">-- USDT</div><p class="text-[11px] text-gray-500 text-center mt-1">تقدر تدفع أكثر براحتك</p></div><div class="bg-black/40 rounded-2xl p-4 border border-white/5 mb-4"><p class="text-xs text-gray-400 mb-2">عنوان المحفظة</p><div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all border border-white/10 text-left text-white">__WALLET__</div><div class="grid grid-cols-2 gap-2 mt-3"><button onclick="copyText('__WALLET__','العنوان')" class="bg-white text-black py-3 rounded-xl font-bold text-sm">نسخ العنوان</button><button onclick="copyText(AMT+'','المبلغ')" class="bg-white/10 text-white border border-white/10 py-3 rounded-xl font-bold text-sm">نسخ المبلغ</button></div></div><button onclick="verify()" id="btn" class="w-full bg-gradient-to-r from-emerald-500 to-green-500 text-black py-4 rounded-xl font-bold">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm min-h-[24px] text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div>
 <script>
 let AMT=0,UID="__UID__";
-function showCopyToast(msg){
-  let t=document.getElementById('toast-copy'),b=document.getElementById('toastCopyBox');
-  b.innerText=msg;
-  t.classList.remove('hidden');
-  setTimeout(()=>t.classList.add('hidden'),2000);
-}
-function copyText(text,label){
-  if(navigator.clipboard && window.isSecureContext){
-    navigator.clipboard.writeText(text).then(()=>{showCopyToast('✅ تم نسخ '+label+' للحافظة');}).catch(()=>{fallbackCopy(text,label);});
-  }else{
-    fallbackCopy(text,label);
-  }
-}
-function fallbackCopy(text,label){
-  let ta=document.createElement('textarea');
-  ta.value=text;ta.style.position='fixed';ta.style.top='-1000px';
-  document.body.appendChild(ta);ta.focus();ta.select();
-  try{document.execCommand('copy');showCopyToast('✅ تم نسخ '+label+' للحافظة');}catch(e){showCopyToast('❌ فشل النسخ');}
-  document.body.removeChild(ta);
-}
+function showCopyToast(msg){let t=document.getElementById('toast-copy'),b=document.getElementById('toastCopyBox');b.innerText=msg;t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2000);}
+function copyText(text,label){if(navigator.clipboard && window.isSecureContext){navigator.clipboard.writeText(text).then(()=>{showCopyToast('✅ تم نسخ '+label+' للحافظة');}).catch(()=>{fallbackCopy(text,label);});}else{fallbackCopy(text,label);}}
+function fallbackCopy(text,label){let ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-1000px';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');showCopyToast('✅ تم نسخ '+label+' للحافظة');}catch(e){showCopyToast('❌ فشل النسخ');}document.body.removeChild(ta);}
 async function init(){let r=await fetch(`/amount/${UID}`).then(x=>x.json());AMT=r.amount;document.getElementById('amt').innerText=AMT+' USDT';document.getElementById('toContent').href=`/content/${UID}`;}
-async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch(`/verify/${UID}`).then(x=>x.json());if(r.paid){s.innerHTML="<span class='text-emerald-400 font-bold'>✅ تم التفعيل - 30 يوم</span>";setTimeout(()=>location.href=`/content/${UID}`,1500);}else{s.innerHTML=`<span class='text-red-400'>❌ لم نجد ${r.amount}</span>`;b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
+async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch(`/verify/${UID}`).then(x=>x.json());if(r.paid){s.innerHTML="<span class='text-emerald-400 font-bold'>✅ تم التفعيل - 30 يوم</span>";setTimeout(()=>location.href=`/content/${UID}`,1500);}else{s.innerHTML=`<span class='text-red-400'>❌ لم نجد ${r.amount} أو أكثر</span>`;b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
 init();
 </script></body></html>"""
 
@@ -86,12 +73,12 @@ async function load(){
   let c=await fetch(`/check?user_id=${UID}`).then(r=>r.json());
   document.getElementById('time').innerText=c.hours||'';
   if(c.status==='disabled'){
-    document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-red-500/20'><p class='text-red-400 font-bold text-lg'>🚫 ${c.message||'تم تعطيل حسابك'}</p><div class='mt-4 opacity-30 pointer-events-none'><p class='text-white text-sm'>الملفات غير متاحة</p></div></div>`;
+    document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-red-500/20'><p class='text-red-400 font-bold text-lg'>🚫 ${c.message||'تم تعطيل حسابك'}</p></div>`;
     return;
   }
   if(c.status!=='active'){
-    let filesHtml="";(c.files||[]).forEach(f=>{filesHtml+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center opacity-30 pointer-events-none'><div><p class='font-bold text-white'>${f}</p><p class='text-xs text-gray-500'>مقفل</p></div><button disabled class='bg-gray-700 text-gray-400 px-4 py-2 rounded-xl text-sm'>مقفل 🔒</button></div>`;});
-    document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-white/10 mb-4'><p class='text-white'>${c.message||'انتهى وقتك'}</p><a href='/pay/${UID}' class='mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-bold'>💳 ادفع للتجديد 30 يوم</a><p class='text-xs text-gray-500 mt-2'>${c.hours||''}</p></div>`+filesHtml;
+    let filesHtml="";(c.files||[]).forEach(f=>{filesHtml+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center opacity-30'><div><p class='font-bold text-white'>${f}</p></div><button disabled class='bg-gray-700 text-gray-400 px-4 py-2 rounded-xl text-sm'>مقفل 🔒</button></div>`;});
+    document.getElementById('list').innerHTML=`<div class='bg-gradient-to-b from-[#1e1e35] to-[#151528] p-6 rounded-[24px] text-center border border-white/10 mb-4'><p class='text-white'>${c.message||'انتهى وقتك'}</p><a href='/pay/${UID}' class='mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-bold'>💳 ادفع للتجديد 30 يوم</a></div>`+filesHtml;
     return;
   }
   let h="";c.files.forEach(f=>{h+=`<div class='bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center'><div><p class='font-bold text-white'>${f}</p></div><button onclick="location.href='/download/${f}?user_id=${UID}'" class='bg-white text-black px-4 py-2 rounded-xl text-sm font-bold'>تحميل</button></div>`;});
@@ -101,40 +88,34 @@ load();
 </script></body></html>"""
 
 ADMIN_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Pro MAX</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] text-white min-h-screen p-4">
-<div id="toast" class="fixed top-4 right-4 z-50 hidden"><div id="toastBox" class="bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 text-sm"><span id="toastText"></span></div></div>
+<div id="toast" class="fixed top-4 right-4 z-50 hidden"><div id="toastBox" class="bg-emerald-500 text-black px-6 py-3 rounded-xl font-bold shadow-2xl text-sm"><span id="toastText"></span></div></div>
 <div class="max-w-7xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-2xl font-bold">لوحة التحكم <span class="text-emerald-400">Pro MAX</span></h1><button onclick="load()" class="bg-emerald-500 text-black px-4 py-2 rounded-xl text-sm font-bold">تحديث</button></div>
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"><div class="bg-emerald-900/40 p-5 rounded-2xl"><p class="text-gray-400 text-xs">النشطين</p><p id="active" class="text-3xl font-bold">--</p></div><div class="bg-[#1a1a2e] p-5 rounded-2xl"><p class="text-gray-400 text-xs">الكل</p><p id="total" class="text-3xl font-bold">--</p></div><div class="bg-[#1a1a2e] p-5 rounded-2xl"><p class="text-gray-400 text-xs">منتهي</p><p id="exp" class="text-3xl font-bold text-red-400">--</p></div><div class="bg-yellow-900/30 p-5 rounded-2xl"><p class="text-gray-400 text-xs">الارباح</p><p id="rev" class="text-xl font-bold text-yellow-400">--</p></div></div>
 <div class="bg-[#12121f] rounded-2xl border border-white/5 overflow-hidden">
 <div class="p-4 bg-black/30 border-b border-white/5 flex flex-wrap gap-3 items-end">
-<div><label class="text-[11px] text-gray-400">اضافة يوزر جديد</label><div class="flex gap-2 mt-1"><input id="newUid" placeholder="USER_ID" class="bg-black border border-white/20 rounded-lg px-3 py-2 text-xs w-36 text-white"><input id="newDays" type="number" value="30" class="bg-black border border-white/20 rounded-lg px-2 py-2 text-xs w-20 text-center text-white"><button onclick="addUser()" class="bg-emerald-500 text-black px-4 py-2 rounded-lg text-xs font-bold">+ اضافة يوزر</button></div></div>
+<div><label class="text-[11px] text-gray-400">اضافة يوزر</label><div class="flex gap-2 mt-1"><input id="newUid" placeholder="USER_ID" class="bg-black border border-white/20 rounded-lg px-3 py-2 text-xs w-36 text-white"><input id="newDays" type="number" value="30" class="bg-black border border-white/20 rounded-lg px-2 py-2 text-xs w-20 text-center text-white"><button onclick="addUser()" class="bg-emerald-500 text-black px-4 py-2 rounded-lg text-xs font-bold">+ اضافة</button></div></div>
 <div class="mr-auto"><input id="search" oninput="filter()" placeholder="بحث..." class="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs w-48"></div>
 </div>
 <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="text-gray-500 bg-black/30"><tr><th class="p-3 text-right">User</th><th class="p-3">متبقي</th><th class="p-3">المبلغ</th><th class="p-3">الحالة</th><th class="p-3 min-w-[650px]">تحكم</th></tr></thead><tbody id="tb"></tbody></table></div></div></div>
 <script>
 const KEY=new URLSearchParams(location.search).get("key");let ALL=[];
-function showToast(msg,color="emerald"){
-  let t=document.getElementById('toast'),box=document.getElementById('toastBox'),txt=document.getElementById('toastText');
-  txt.innerText=msg;
-  box.className=`px-6 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 text-sm ${color==='red'?'bg-red-500 text-white':color==='blue'?'bg-blue-500 text-white':'bg-emerald-500 text-black'}`;
-  t.classList.remove('hidden');setTimeout(()=>{t.classList.add('hidden')},3000);
-}
+function showToast(msg,color="emerald"){let t=document.getElementById('toast'),box=document.getElementById('toastBox'),txt=document.getElementById('toastText');txt.innerText=msg;box.className=`px-6 py-3 rounded-xl font-bold shadow-2xl text-sm ${color==='red'?'bg-red-500 text-white':color==='blue'?'bg-blue-500 text-white':'bg-emerald-500 text-black'}`;t.classList.remove('hidden');setTimeout(()=>{t.classList.add('hidden')},3000);}
 async function load(){let s=await fetch(`/admin/stats?key=${KEY}`).then(r=>r.json());document.getElementById('active').innerText=s.active_users;document.getElementById('total').innerText=s.total_users;document.getElementById('exp').innerText=s.expired;document.getElementById('rev').innerText=s.total_revenue+" USDT";let u=await fetch(`/admin/users?key=${KEY}`).then(r=>r.json());ALL=u;render(u);}
 function render(list){let h="";list.forEach(x=>{
-  let isActive = x.is_paid;
-  let status = x.raw_status==='inactive' ? '<span class="bg-orange-900/50 text-orange-300 px-2 py-1 rounded-full text-xs">⏸️ معطل</span>' : isActive ? '<span class="bg-emerald-900/50 text-emerald-300 px-2 py-1 rounded-full text-xs">✅ نشط</span>' : '<span class="bg-red-900/50 text-red-300 px-2 py-1 rounded-full text-xs">❌ منتهي</span>';
-  let toggleBtn = x.raw_status==='inactive' ? `<button onclick="toggleUser('${x.user_id}')" class='bg-emerald-900/50 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>🟢 تنشيط</button>` : `<button onclick="toggleUser('${x.user_id}')" class='bg-orange-900/50 text-orange-300 px-2 py-1.5 rounded-lg text-xs'>🔴 تعطيل</button>`;
-  h+=`<tr class='border-b border-white/5'><td class='p-3 font-mono text-xs'><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='text-cyan-400 underline'>${x.user_id} ↗</a></td><td class='p-3 text-xs'>${x.remaining||''}</td><td class='p-3 text-emerald-400'>${x.amount_paid||0}</td><td class='p-3'>${status}</td><td class='p-2 flex gap-1 flex-wrap'>${toggleBtn}<input id='d_${x.user_id}' type='number' value='30' class='bg-black border border-white/20 rounded-lg w-14 px-2 py-1.5 text-xs text-center text-white'><button onclick="extCustom('${x.user_id}')" class='bg-white text-black px-2 py-1.5 rounded-lg text-xs font-bold'>+ اضافة</button><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='bg-blue-900/40 text-blue-300 px-2 py-1.5 rounded-lg text-xs'>👁️ فتح</a><a href='/content/${x.user_id}' target='_blank' class='bg-purple-900/40 text-purple-300 px-2 py-1.5 rounded-lg text-xs'>📁 محتوى</a><a href='/pay/${x.user_id}' target='_blank' class='bg-emerald-900/40 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>💳 دفع</a><button onclick="resetU('${x.user_id}')" class='bg-gray-700 px-2 py-1.5 rounded-lg text-xs'>تصفير 0</button><button onclick="del('${x.user_id}')" class='bg-red-900/50 text-red-300 px-2 py-1.5 rounded-lg text-xs'>حذف</button></td></tr>`});document.getElementById('tb').innerHTML=h}
+  let status=x.raw_status==='inactive' ? '<span class="bg-orange-900/50 text-orange-300 px-2 py-1 rounded-full text-xs">⏸️ معطل</span>' : x.is_paid ? '<span class="bg-emerald-900/50 text-emerald-300 px-2 py-1 rounded-full text-xs">✅ نشط</span>' : '<span class="bg-red-900/50 text-red-300 px-2 py-1 rounded-full text-xs">❌ منتهي</span>';
+  let toggle=x.raw_status==='inactive' ? `<button onclick="toggleUser('${x.user_id}')" class='bg-emerald-900/50 text-emerald-300 px-2 py-1.5 rounded-lg text-xs'>🟢 تنشيط</button>` : `<button onclick="toggleUser('${x.user_id}')" class='bg-orange-900/50 text-orange-300 px-2 py-1.5 rounded-lg text-xs'>🔴 تعطيل</button>`;
+  h+=`<tr class='border-b border-white/5'><td class='p-3 font-mono text-xs'><a href='/admin/view/${x.user_id}?key=${KEY}' target='_blank' class='text-cyan-400 underline'>${x.user_id}</a></td><td class='p-3 text-xs'>${x.remaining||''}</td><td class='p-3 text-emerald-400'>${x.amount_paid||0}</td><td class='p-3'>${status}</td><td class='p-2 flex gap-1 flex-wrap'>${toggle}<input id='d_${x.user_id}' type='number' value='30' class='bg-black border border-white/20 rounded-lg w-14 px-2 py-1.5 text-xs text-center text-white'><button onclick="extCustom('${x.user_id}')" class='bg-white text-black px-2 py-1.5 rounded-lg text-xs font-bold'>+ اضافة</button><a href='/content/${x.user_id}' target='_blank' class='bg-purple-900/40 text-purple-300 px-2 py-1.5 rounded-lg text-xs'>📁 محتوى</a><button onclick="resetU('${x.user_id}')" class='bg-gray-700 px-2 py-1.5 rounded-lg text-xs'>تصفير</button><button onclick="del('${x.user_id}')" class='bg-red-900/50 text-red-300 px-2 py-1.5 rounded-lg text-xs'>حذف</button></td></tr>`});document.getElementById('tb').innerHTML=h}
 function filter(){let q=document.getElementById('search').value;render(ALL.filter(x=>x.user_id.toLowerCase().includes(q.toLowerCase())))}
-async function addUser(){let uid=document.getElementById('newUid').value.trim();let days=parseInt(document.getElementById('newDays').value)||0;if(!uid){showToast('اكتب الـ ID','red');return;}let r=await fetch(`/admin/add_user?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});let j=await r.json();if(j.ok){showToast('✅ تم اضافة '+uid+' '+(days>0?days+' يوم':'0 يوم'),'emerald');document.getElementById('newUid').value='';load();}else{showToast(j.error||'موجود','red');}}
-async function del(uid){if(!confirm('حذف '+uid+' ?'))return;await fetch(`/admin/delete?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🗑️ تم حذف '+uid,'red');load();}
-async function resetU(uid){await fetch(`/admin/reset?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🔄 تم تصفير '+uid+' = 0','blue');load();}
-async function extCustom(uid){let days=parseInt(document.getElementById('d_'+uid).value)||0;if(days<=0){showToast('اكتب عدد الايام','red');return;}await fetch(`/admin/extend?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});showToast('✅ تم اضافة '+days+' يوم لـ '+uid,'emerald');load();}
-async function toggleUser(uid){let r=await fetch(`/admin/toggle?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});let j=await r.json();if(j.action==='enabled') showToast('✅ تم تنشيط '+uid+' 30 يوم','emerald'); else showToast('⏸️ تم تعطيل '+uid,'red');load();}
+async function addUser(){let uid=document.getElementById('newUid').value.trim();let days=parseInt(document.getElementById('newDays').value)||0;if(!uid){showToast('اكتب ID','red');return;}let r=await fetch(`/admin/add_user?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});let j=await r.json();if(j.ok){showToast('✅ '+uid,'emerald');document.getElementById('newUid').value='';load();}else{showToast(j.error||'موجود','red');}}
+async function del(uid){if(!confirm('حذف '+uid+' ?'))return;await fetch(`/admin/delete?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🗑️ '+uid,'red');load();}
+async function resetU(uid){await fetch(`/admin/reset?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});showToast('🔄 تصفير '+uid,'blue');load();}
+async function extCustom(uid){let days=parseInt(document.getElementById('d_'+uid).value)||0;await fetch(`/admin/extend?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid,days:days})});showToast('✅ +'+days+' يوم','emerald');load();}
+async function toggleUser(uid){let r=await fetch(`/admin/toggle?key=${KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:uid})});let j=await r.json();showToast(j.action==='enabled'?'✅ تنشيط':'⏸️ تعطيل',j.action==='enabled'?'emerald':'red');load();}
 load();
 </script></body></html>"""
 
 @app.route('/')
-def home(): return "OK - Chrome Copy Fix", 200
+def home(): return "OK - 1$ Min Any Amount", 200
 @app.route('/pay/<user_id>')
 def pay_page(user_id): return Response(PAY_HTML.replace("__WALLET__", ROOT_WALLET).replace("__UID__", user_id), mimetype='text/html')
 @app.route('/content/<user_id>')
@@ -191,7 +172,7 @@ def download(filename):
     if not user_id: return "user_id missing", 400
     user = get_user(user_id)
     if not user: return redirect(f"/pay/{user_id}")
-    if user.get("status")=="inactive": return Response("🚫 تم تعطيل حسابك من الادارة", 403)
+    if user.get("status")=="inactive": return Response("🚫 تم تعطيل حسابك", 403)
     if get_remaining_hours(user) <= 0: return redirect(f"/pay/{user_id}")
     if filename not in FILES: return f"File {filename} not allowed", 403
     if filename == "File.npvt":
@@ -199,7 +180,7 @@ def download(filename):
         r = requests.get(gdrive_url, stream=True, timeout=30)
         return Response(r.iter_content(chunk_size=8192), mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
     file_path = os.path.join(FOLDER, filename)
-    if not os.path.exists(file_path): return f"File {filename} not found in repo/files", 404
+    if not os.path.exists(file_path): return f"File {filename} not found", 404
     with open(file_path, 'rb') as f: data = f.read()
     return Response(data, mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
 
@@ -237,21 +218,18 @@ def a_users():
 @app.route("/admin/add_user", methods=["POST"])
 def a_add_user():
     if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
-    uid=request.json.get("user_id","").strip()
-    days=int(request.json.get("days",0))
+    uid=request.json.get("user_id","").strip(); days=int(request.json.get("days",0))
     if not uid: return jsonify({"error":"اكتب ID"}),400
     if get_user(uid): return jsonify({"error":"موجود مسبقا"}),400
     if days>0: exp=datetime.now()+timedelta(days=days)
     else: exp=datetime.now()
-    user={"user_id":uid,"expires_at":exp.strftime("%Y-%m-%d %H:%M:%S"),"status":"active"}
-    save_user(user)
+    save_user({"user_id":uid,"expires_at":exp.strftime("%Y-%m-%d %H:%M:%S"),"status":"active"})
     return jsonify({"ok":True})
 
 @app.route("/admin/delete", methods=["POST"])
 def a_del():
     if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
-    uid=request.json.get("user_id")
-    supabase.table("users").delete().eq("user_id", uid).execute()
+    uid=request.json.get("user_id"); supabase.table("users").delete().eq("user_id", uid).execute()
     try: supabase.table("subscriptions").delete().eq("user_id", uid).execute()
     except: pass
     return jsonify({"ok":True})
@@ -259,42 +237,30 @@ def a_del():
 @app.route("/admin/reset", methods=["POST"])
 def a_reset():
     if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
-    uid=request.json.get("user_id")
-    user=get_user(uid)
-    if user:
-        user["expires_at"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user["status"]="active"
-        save_user(user)
+    uid=request.json.get("user_id"); user=get_user(uid)
+    if user: user["expires_at"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
     return jsonify({"ok":True})
 
 @app.route("/admin/extend", methods=["POST"])
 def a_ext():
     if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
-    uid=request.json.get("user_id"); days=int(request.json.get("days",30))
-    user=get_user(uid)
+    uid=request.json.get("user_id"); days=int(request.json.get("days",30)); user=get_user(uid)
     if not user: return jsonify({"error":"not found"}),404
     try: old=datetime.strptime(user["expires_at"], "%Y-%m-%d %H:%M:%S")
     except: old=datetime.now()
     if old<datetime.now(): old=datetime.now()
-    new_exp=old+timedelta(days=days)
-    user["expires_at"]=new_exp.strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
+    user["expires_at"]=(old+timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S"); user["status"]="active"; save_user(user)
     return jsonify({"ok":True})
 
 @app.route("/admin/toggle", methods=["POST"])
 def a_toggle():
     if request.args.get("key")!=ADMIN_KEY: return jsonify({"error":"no"}),401
-    uid=request.json.get("user_id")
-    user=get_user(uid)
+    uid=request.json.get("user_id"); user=get_user(uid)
     if not user: return jsonify({"error":"not found"}),404
     if user.get("status")=="inactive":
         user["expires_at"]=(datetime.now()+timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
-        user["status"]="active"
-        save_user(user)
-        return jsonify({"ok":True,"action":"enabled"})
-    else:
-        user["status"]="inactive"
-        save_user(user)
-        return jsonify({"ok":True,"action":"disabled"})
+        user["status"]="active"; save_user(user); return jsonify({"ok":True,"action":"enabled"})
+    else: user["status"]="inactive"; save_user(user); return jsonify({"ok":True,"action":"disabled"})
 
 @app.route("/admin/view/<user_id>")
 def a_view(user_id):
@@ -302,7 +268,7 @@ def a_view(user_id):
     u=get_user(user_id)
     if not u: return Response(f"<body style='background:#080810;color:white;padding:20px'><h1>{user_id} مش موجود</h1></body>",404)
     rem="معطل" if u.get("status")=="inactive" else format_hm(get_remaining_hours(u))
-    html=f"""<html dir='rtl'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><script src='https://cdn.tailwindcss.com'></script></head><body class='bg-[#080810] text-white p-6'><div class='max-w-lg mx-auto bg-[#12121f] rounded-2xl p-6 border border-white/10'><h1 class='text-xl font-bold mb-4'>👤 {user_id}</h1><p>متبقي: {rem}</p><p>حالة: {u.get("status")}</p><div class='mt-6 grid grid-cols-2 gap-2'><a href='/pay/{user_id}' target='_blank' class='bg-emerald-500 text-black py-3 rounded-xl text-center font-bold'>💳 دفع</a><a href='/content/{user_id}' target='_blank' class='bg-purple-600 text-white py-3 rounded-xl text-center font-bold'>📁 محتوى</a></div></div></body></html>"""
+    html=f"<html dir='rtl'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><script src='https://cdn.tailwindcss.com'></script></head><body class='bg-[#080810] text-white p-6'><div class='max-w-lg mx-auto bg-[#12121f] rounded-2xl p-6 border border-white/10'><h1 class='text-xl font-bold mb-4'>👤 {user_id}</h1><p>متبقي: {rem}</p><p>حالة: {u.get('status')}</p><div class='mt-6 grid grid-cols-2 gap-2'><a href='/pay/{user_id}' target='_blank' class='bg-emerald-500 text-black py-3 rounded-xl text-center font-bold'>💳 دفع</a><a href='/content/{user_id}' target='_blank' class='bg-purple-600 text-white py-3 rounded-xl text-center font-bold'>📁 محتوى</a></div></div></body></html>"
     return Response(html,mimetype='text/html')
 
 if __name__ == '__main__':
