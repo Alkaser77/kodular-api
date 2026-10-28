@@ -40,25 +40,19 @@ def get_user(user_id):
     try:
         res = supabase.table("users").select("*").eq("user_id", user_id).execute()
         return res.data[0] if res.data else None
-    except:
-        return None
+    except: return None
 
 def save_user(user):
-    try:
-        supabase.table("users").upsert(user).execute()
-    except Exception as e:
-        print("save error", e)
+    try: supabase.table("users").upsert(user).execute()
+    except Exception as e: print("save error", e)
 
 def parse_expire(exp_str):
     if not exp_str: return None
     s = exp_str.replace('Z','').split('.')[0].replace('T',' ')
-    try:
-        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    try: return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
     except:
-        try:
-            return datetime.fromisoformat(exp_str.replace('Z','').split('.')[0])
-        except:
-            return None
+        try: return datetime.fromisoformat(exp_str.replace('Z','').split('.')[0])
+        except: return None
 
 def get_remaining_hours(user):
     if not user or not user.get("expires_at"): return 0
@@ -67,18 +61,13 @@ def get_remaining_hours(user):
     if not exp: return 0
     return max(0, (exp - datetime.now()).total_seconds()/3600)
 
-def get_remaining_seconds(user):
-    return int(get_remaining_hours(user)*3600)
+def get_remaining_seconds(user): return int(get_remaining_hours(user)*3600)
 
 def format_hm(hours_float):
     if hours_float <=0: return "0:00:00"
     total_seconds = int(hours_float*3600)
-    h = total_seconds//3600
-    m = (total_seconds%3600)//60
-    s = total_seconds%60
-    if h>=24:
-        d=h//24; rh=h%24
-        return f"{d} يوم {rh}:{m:02d}:{s:02d}"
+    h = total_seconds//3600; m = (total_seconds%3600)//60; s = total_seconds%60
+    if h>=24: d=h//24; rh=h%24; return f"{d} يوم {rh}:{m:02d}:{s:02d}"
     return f"{h}:{m:02d}:{s:02d}"
 
 HOME_HTML = """
@@ -96,27 +85,35 @@ HOME_HTML = """
 <div>
 <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs text-emerald-300 mb-4"><span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> النظام شغال - دخول فوري</div>
 <h1 class="text-4xl lg:text-5xl font-black leading-[1.2]">دخولك للمحتوى<br><span class="bg-gradient-to-r from-violet-400 to-emerald-400 bg-clip-text text-transparent">في ثانية واحدة</span></h1>
-<p class="text-gray-400 mt-4 text-sm">رابط واحد ينشألك حساب، يعطيك ساعتين مجانا.</p>
+<p class="text-gray-400 mt-4 text-sm">رابط واحد ينشألك حساب، يعطيك ساعتين مجانا، ويفتحلك صفحة العرض الاحترافية.</p>
 <div class="mt-8 flex flex-col gap-3">
-<button onclick="checkAndGo()" class="w-full bg-white text-black py-4 rounded-2xl font-black text-center text-lg glow">🚀 إنشاء حساب ودخول فوري</button>
+<button onclick="checkAndGo()" class="w-full bg-white text-black py-4 rounded-2xl font-black text-center text-lg glow hover:scale-[1.02] transition">🚀 إنشاء حساب ودخول فوري</button>
 <div id="limitMsg" class="hidden bg-yellow-900/30 border border-yellow-500/30 rounded-xl p-3 text-center text-sm text-yellow-200"></div>
-<div class="flex gap-2 mt-2"><input id="uidInput" placeholder="عندك ID ؟ اكتبه هنا" class="flex-1 bg-[#12121f] border border-white/10 rounded-2xl px-4 py-3.5 text-sm outline-none"><button onclick="goUid()" class="bg-[#1e1e35] border border-white/10 px-6 rounded-2xl font-bold">دخول</button></div>
+<div class="flex gap-2 mt-2"><input id="uidInput" placeholder="عندك ID ؟ اكتبه هنا" class="flex-1 bg-[#12121f] border border-white/10 rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-violet-500"><button onclick="goUid()" class="bg-[#1e1e35] border border-white/10 px-6 rounded-2xl font-bold">دخول</button></div>
 </div>
+<div class="grid grid-cols-3 gap-3 mt-8"><div class="glass rounded-2xl p-4 text-center"><p class="text-2xl font-black text-violet-400">2H</p><p class="text-[11px] text-gray-400">مجانا</p></div><div class="glass rounded-2xl p-4 text-center"><p class="text-2xl font-black text-emerald-400">1$</p><p class="text-[11px] text-gray-400">30 يوم</p></div><div class="glass rounded-2xl p-4 text-center"><p class="text-2xl font-black">∞</p><p class="text-[11px] text-gray-400">تحميل</p></div></div>
 </div>
 <div class="bg-[#12121f] rounded-[32px] p-2 border border-white/10 shadow-2xl"><div class="bg-black rounded-[24px] p-6"><div class="flex justify-between mb-6"><span class="text-xs text-gray-500">معاينة حسابك الحقيقي</span><span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div><div class="bg-[#12121f] rounded-[20px] p-5 border border-white/5"><div class="flex items-center justify-end gap-2 mb-3"><span>👤</span><span id="previewUid" class="font-bold">--</span></div><p class="text-sm text-right">متبقي: <span id="previewTimer" class="font-bold text-emerald-400">--:--:--</span> : متبقي</p><p class="text-sm text-right">حالة: <span id="previewStatus">active</span> : حالة</p><div class="grid grid-cols-2 gap-3 mt-6"><button onclick="openRealContent()" class="bg-[#8b5cf6] py-3 rounded-xl text-center font-bold text-sm">📁 محتوى</button><button onclick="openRealPay()" class="bg-[#10b981] py-3 rounded-xl text-center font-bold text-sm text-black">💳 دفع</button></div></div></div></div>
 </div>
+
+<div class="max-w-6xl mx-auto px-4 mt-12 grid md:grid-cols-3 gap-4">
+<button onclick="checkAndGo()" class="glass rounded-[24px] p-6 hover:border-violet-500/50 hover:scale-[1.02] transition text-right w-full"><div class="w-12 h-12 bg-violet-500/20 rounded-xl flex items-center justify-center text-violet-300 mb-4"><i class="fa-solid fa-bolt"></i></div><h3 class="font-bold">وصول فوري</h3><p class="text-sm text-gray-400 mt-2">يضغط ويدخل طول لصفحته</p><span class="text-xs text-violet-400 mt-3 block">دخول الآن →</span></button>
+<a href="/view/demo_user" class="glass rounded-[24px] p-6 hover:border-emerald-500/50 hover:scale-[1.02] transition text-right"><div class="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-300 mb-4"><i class="fa-solid fa-shield"></i></div><h3 class="font-bold">حماية متقدمة</h3><p class="text-sm text-gray-400 mt-2">شوف صفحة العرض</p><span class="text-xs text-emerald-400 mt-3 block">عرض تجريبي →</span></a>
+<div onclick="openChat()" class="glass rounded-[24px] p-6 hover:border-yellow-500/50 hover:scale-[1.02] transition text-right cursor-pointer"><div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center text-yellow-300 mb-4"><i class="fa-solid fa-headset"></i></div><h3 class="font-bold">دعم 24/7</h3><p class="text-sm text-gray-400 mt-2">دردشة فورية داخل الموقع</p><span class="text-xs text-yellow-400 mt-3 block">افتح الدردشة →</span></div>
+</div>
+
 <div id="chatBtn" onclick="openChat()" class="fixed bottom-6 right-6 w-14 h-14 bg-white rounded-full flex items-center justify-center text-black shadow-2xl cursor-pointer z-50 glow"><i class="fa-solid fa-comments text-xl"></i></div>
-<div id="chatBox" class="fixed bottom-24 right-4 w-[360px] max-w-[90vw] bg-[#12121f] border border-white/10 rounded-[20px] shadow-2xl z-50 hidden flex-col overflow-hidden"><div class="bg-[#1e1e35] p-4 flex justify-between items-center"><div><p class="font-bold text-sm">💬 الدعم الفوري</p><p class="text-[11px] text-green-400">● متصل الآن</p></div><button onclick="closeChat()" class="text-gray-400">✕</button></div><div id="chatMsgs" class="flex-1 p-4 space-y-3 overflow-y-auto max-h-[320px] text-sm"><div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋</div></div><div class="p-3 bg-black/30 flex gap-2"><input id="chatInput" placeholder="اكتب رسالتك..." class="flex-1 bg-[#0a0a12] border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none"><button onclick="sendMsg()" class="bg-white text-black px-4 rounded-xl font-bold text-sm">ارسال</button></div></div>
+<div id="chatBox" class="fixed bottom-24 right-4 w-[360px] max-w-[90vw] bg-[#12121f] border border-white/10 rounded-[20px] shadow-2xl z-50 hidden flex-col overflow-hidden"><div class="bg-[#1e1e35] p-4 flex justify-between items-center"><div><p class="font-bold text-sm">💬 الدعم الفوري</p><p class="text-[11px] text-green-400">● متصل الآن</p></div><button onclick="closeChat()" class="text-gray-400">✕</button></div><div id="chatMsgs" class="flex-1 p-4 space-y-3 overflow-y-auto max-h-[320px] text-sm"><div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋 انا الدعم، كيف نساعدك؟</div></div><div class="p-3 bg-black/30 flex gap-2"><input id="chatInput" placeholder="اكتب رسالتك..." class="flex-1 bg-[#0a0a12] border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none"><button onclick="sendMsg()" class="bg-white text-black px-4 rounded-xl font-bold text-sm">ارسال</button></div></div>
 <script>
 let SUPPORT_UID = localStorage.getItem('support_uid') || "guest_"+Math.floor(Math.random()*99999);
 localStorage.setItem('support_uid', SUPPORT_UID);
-function goUid(){let v=document.getElementById('uidInput').value.trim(); if(!v)return; location.href='/view/'+v;}
+function goUid(){let v=document.getElementById('uidInput').value.trim(); if(!v){document.getElementById('uidInput').focus();return;} location.href='/view/'+v;}
 function openChat(){document.getElementById('chatBox').classList.remove('hidden'); document.getElementById('chatBox').classList.add('flex'); loadMsgs();}
 function closeChat(){document.getElementById('chatBox').classList.add('hidden'); document.getElementById('chatBox').classList.remove('flex');}
-async function loadMsgs(){ try{let r=await fetch('/api/support/get?user_id='+SUPPORT_UID).then(x=>x.json()); let box=document.getElementById('chatMsgs'); let h='<div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋</div>'; r.forEach(m=>{if(m.sender==='user') h+='<div class="bg-white text-black p-3 rounded-2xl ml-10 rounded-br-sm">'+m.message+'</div>'; else h+='<div class="bg-[#1e1e35] p-3 rounded-2xl mr-10 rounded-bl-sm border border-white/10">'+m.message+'</div>';}); box.innerHTML=h; box.scrollTop=box.scrollHeight;}catch(e){}}
+async function loadMsgs(){ try{let r=await fetch('/api/support/get?user_id='+SUPPORT_UID).then(x=>x.json()); let box=document.getElementById('chatMsgs'); let h='<div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋 انا الدعم، كيف نساعدك؟</div>'; r.forEach(m=>{if(m.sender==='user') h+='<div class="bg-white text-black p-3 rounded-2xl ml-10 rounded-br-sm">'+m.message+'</div>'; else h+='<div class="bg-[#1e1e35] p-3 rounded-2xl mr-10 rounded-bl-sm border border-white/10">'+m.message+'</div>';}); box.innerHTML=h; box.scrollTop=box.scrollHeight;}catch(e){}}
 async function sendMsg(){ let inp=document.getElementById('chatInput'); let txt=inp.value.trim(); if(!txt) return; await fetch('/api/support/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:SUPPORT_UID,message:txt,sender:'user'})}); inp.value=''; loadMsgs(); }
-function openRealContent(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/content/'+id; else alert('ما عندكش حساب'); }
-function openRealPay(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/pay/'+id; else alert('ما عندكش حساب'); }
+function openRealContent(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/content/'+id; else alert('ما عندكش حساب، دير انشاء اول'); }
+function openRealPay(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/pay/'+id; else alert('ما عندكش حساب، دير انشاء اول'); }
 async function loadPreview(){
   let myId = localStorage.getItem('my_user_id');
   let uidEl = document.getElementById('previewUid');
@@ -131,13 +128,11 @@ async function loadPreview(){
     timerEl.innerText = rem;
     let parts = rem.split(':');
     let sec = 0;
-    if(parts.length===3){ sec = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]); }
-    setInterval(function(){
-      if(sec<=0) return;
-      sec--;
-      let h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
-      timerEl.innerText = h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
-    },1000);
+    if(parts.length>=2){ 
+      if(parts.length===3) sec = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]);
+      else sec = parseInt(parts[0])*60 + parseInt(parts[1]);
+    }
+    setInterval(function(){ if(sec<=0) return; sec--; let h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; timerEl.innerText = h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0'); },1000);
   }catch(e){ timerEl.innerText = "خطأ"; }
 }
 loadPreview();
@@ -162,8 +157,8 @@ async function checkAndGo(){
 
 PAY_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>دفع</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md"><div class="bg-[#1e1e35] rounded-[24px] p-6 border border-white/10"><h1 class="text-xl font-bold text-white text-center">الدفع الآمن - BSC</h1><div class="bg-black/40 rounded-2xl p-4 mt-4"><div id="amt" class="text-3xl font-bold text-emerald-400 text-center">-- USDT</div></div><div class="bg-black/40 rounded-2xl p-4 mt-4"><p class="text-xs text-gray-400">عنوان المحفظة</p><div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all text-white mt-2">__WALLET__</div></div><button onclick="verify()" id="btn" class="w-full bg-emerald-500 text-black py-4 rounded-xl font-bold mt-4">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div>
 <script>
-let AMT=0,UID="__UID__";
-async function init(){let r=await fetch('/amount/'+UID).then(x=>x.json());AMT=r.amount;document.getElementById('amt').innerText=AMT+' USDT';document.getElementById('toContent').href='/content/'+UID;}
+let UID="__UID__";
+async function init(){let r=await fetch('/amount/'+UID).then(x=>x.json());document.getElementById('amt').innerText=r.amount+' USDT';document.getElementById('toContent').href='/content/'+UID;}
 async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch('/verify/'+UID).then(x=>x.json());if(r.paid){s.innerHTML="✅ تم التفعيل";setTimeout(()=>location.href='/content/'+UID,1500);}else{s.innerHTML='❌ لم يتم العثور';b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
 init();
 </script></body></html>"""
@@ -211,7 +206,6 @@ tick();
 
 @app.route('/')
 def home(): return Response(HOME_HTML, mimetype='text/html')
-
 @app.route('/go')
 def go():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
@@ -239,15 +233,12 @@ def go():
     user = {"user_id": uid, "expires_at": exp.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "ip_address": ip}
     save_user(user)
     if fp and fp.startswith('fp_'):
-        try:
-            supabase.table("device_limits").upsert({"fingerprint": fp, "user_id": uid, "ip_address": ip, "created_at": datetime.now().isoformat()}).execute()
+        try: supabase.table("device_limits").upsert({"fingerprint": fp, "user_id": uid, "ip_address": ip, "created_at": datetime.now().isoformat()}).execute()
         except: pass
     resp = redirect(f"/view/{uid}")
-    if fp:
-        resp.set_cookie('device_fp', fp, max_age=86400*30, samesite='Lax')
+    if fp: resp.set_cookie('device_fp', fp, max_age=86400*30, samesite='Lax')
     resp.set_cookie('last_user_id', uid, max_age=86400, samesite='Lax')
     return resp
-
 @app.route('/view/<user_id>')
 def view_user(user_id):
     u = get_user(user_id)
@@ -259,7 +250,6 @@ def view_user(user_id):
     rem_initial = format_hm(get_remaining_hours(u)) if u.get("status")!="inactive" else "معطل"
     status = u.get("status", "active")
     return Response(render_view(user_id, remaining_sec, rem_initial, status), mimetype='text/html')
-
 @app.route('/pay/<user_id>')
 def pay_page(user_id): return Response(PAY_HTML.replace("__WALLET__", ROOT_WALLET).replace("__UID__", user_id), mimetype='text/html')
 @app.route('/content/<user_id>')
@@ -345,9 +335,8 @@ def a_users():
     out=[]
     for u in users:
         raw_status=u.get("status","active")
-        is_paid = raw_status!="inactive" and get_remaining_hours(u)>0
         rem = format_hm(get_remaining_hours(u)) if raw_status!="inactive" else "معطل"
-        out.append({"user_id":u["user_id"],"expire_at":u["expires_at"],"remaining":rem,"raw_status":raw_status, "is_paid": is_paid})
+        out.append({"user_id":u["user_id"],"expire_at":u["expires_at"],"remaining":rem,"raw_status":raw_status})
     return jsonify(out)
 
 if __name__ == '__main__':
