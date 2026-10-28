@@ -8,7 +8,7 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 ADMIN_KEY = os.environ.get('ADMIN_KEY', "admin123")
-ROOT_WALLET = os.getenv("ROOT_WALLET", "0x2d447f9d656594f6c65de039aebe7da32a968400")
+ROOT_WALLET = os.getenv("ROOT_WALLET", "0x5430161DA6be4EF2B1Cfd2452F076eB67Db3BAc0")
 USDT = "0x55d398326f99059fF775485246999027B3196775"
 RPC = "https://bsc-dataseed.binance.org/"
 TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -18,7 +18,8 @@ FILES = ["File.npvt", "File.ssc", "File.nm", "File.hc", "File.ehi", "File.npvs",
 
 def amount_for(uid):
     h = abs(hash(str(uid))) % 900 + 100
-    return round(15 + h/10000, 4)
+    return round(1 + h/10000, 4)
+
 def check_payment(uid):
     amt = amount_for(uid); target = int(amt * 10**18)
     try:
@@ -29,10 +30,11 @@ def check_payment(uid):
         try: used = {x["tx_hash"] for x in supabase.table("subscriptions").select("tx_hash").execute().data if x.get("tx_hash")}
         except: pass
         for log in logs:
-            if int(log["data"],16)==target and log["transactionHash"] not in used:
+            if int(log["data"],16) >= target and log["transactionHash"] not in used:
                 return True, log["transactionHash"], amt
         return False, "no", amt
     except Exception as e: return False, str(e), amt
+
 def get_user(user_id):
     res = supabase.table("users").select("*").eq("user_id", user_id).execute()
     return res.data[0] if res.data else None
@@ -75,7 +77,7 @@ function fallbackCopy(text,label){
   document.body.removeChild(ta);
 }
 async function init(){let r=await fetch(`/amount/${UID}`).then(x=>x.json());AMT=r.amount;document.getElementById('amt').innerText=AMT+' USDT';document.getElementById('toContent').href=`/content/${UID}`;}
-async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch(`/verify/${UID}`).then(x=>x.json());if(r.paid){s.innerHTML="<span class='text-emerald-400 font-bold'>✅ تم التفعيل - 30 يوم</span>";setTimeout(()=>location.href=`/content/${UID}`,1500);}else{s.innerHTML=`<span class='text-red-400'>❌ لم نجد ${r.amount}</span>`;b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
+async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch(`/verify/${UID}`).then(x=>x.json());if(r.paid){s.innerHTML="<span class='text-emerald-400 font-bold'>✅ تم التفعيل - 30 يوم</span>";setTimeout(()=>location.href=`/content/${UID}`,1500);}else{s.innerHTML=`<span class='text-red-400'>❌ لم يتم العثور على الدفع</span>`;b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
 init();
 </script></body></html>"""
 
