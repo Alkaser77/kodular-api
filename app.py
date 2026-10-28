@@ -251,15 +251,39 @@ loadUsers();
 
 def render_view(user_id, remaining_sec, rem_initial, status):
     html = """
-<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__USERID__</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-black min-h-screen p-4"><div class="max-w-md mx-auto mt-10 bg-[#12121f] rounded-[24px] p-6 border border-white/10"><div class="text-right"><p class="text-white">متبقي: <span id="countdown" class="font-black text-emerald-400 text-lg">__REM__</span> : متبقي</p><p class="text-white mt-1">حالة: __STATUS__</p><p id="expiredMsg" class="hidden mt-3 bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-center text-sm text-red-300">⏰ انتهى وقتك</p></div><div class="grid grid-cols-2 gap-3 mt-8"><a href="/content/__USERID__" class="bg-[#8b5cf6] text-white py-3.5 rounded-xl text-center font-bold">📁 محتوى</a><a href="/pay/__USERID__" class="bg-[#10b981] text-black py-3.5 rounded-xl text-center font-bold">💳 دفع</a></div></div>
+<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__USERID__</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-black min-h-screen p-4"><div class="max-w-md mx-auto mt-10 bg-[#12121f] rounded-[24px] p-6 border border-white/10"><div class="text-right"><p class="text-white">متبقي: <span id="countdown" class="font-black text-emerald-400 text-lg">__REM__</span></p><p class="text-white mt-2 text-sm">حالة: <span id="statusBadge" class="px-2 py-1 rounded-full text-xs">__STATUS__</span></p><p id="expiredMsg" class="hidden mt-3 bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-center text-sm text-red-300">⏰ انتهى وقتك - ادفع للتجديد</p></div><div class="grid grid-cols-2 gap-3 mt-8"><a href="/content/__USERID__" class="bg-[#8b5cf6] text-white py-3.5 rounded-xl text-center font-bold">📁 محتوى</a><a href="/pay/__USERID__" class="bg-[#10b981] text-black py-3.5 rounded-xl text-center font-bold">💳 دفع</a></div></div>
 <script>
 localStorage.setItem('my_user_id', '__USERID__');
 localStorage.setItem('last_go_time', Date.now().toString());
 let remaining = __SEC__;
 let el = document.getElementById('countdown');
 let expMsg = document.getElementById('expiredMsg');
-function formatHM(sec){ if(sec<=0) return "0:00:00"; let h=Math.floor(sec/3600); let m=Math.floor((sec%3600)/60); let s=sec%60; return h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0'); }
-function tick(){ if(remaining<=0){ el.innerText="0:00:00"; el.classList.add('text-red-400'); expMsg.classList.remove('hidden'); return; } el.innerText=formatHM(remaining); remaining--; setTimeout(tick,1000); }
+let badge = document.getElementById('statusBadge');
+function formatFull(sec){
+    if(sec<=0) return "0:00:00";
+    let d=Math.floor(sec/86400);
+    let h=Math.floor((sec%86400)/3600);
+    let m=Math.floor((sec%3600)/60);
+    let s=sec%60;
+    if(d>0) return d+" يوم "+h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
+    return h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
+}
+function tick(){
+    if(remaining<=0){
+        el.innerText="0:00:00";
+        el.className="font-black text-red-400 text-lg";
+        expMsg.classList.remove('hidden');
+        badge.innerText="منتهي";
+        badge.className="px-2 py-1 rounded-full text-xs bg-red-500/20 text-red-300";
+        return;
+    }
+    el.innerText=formatFull(remaining);
+    if(badge.innerText.includes('active') || badge.innerText==='active'){
+        badge.innerText="● فعال"; badge.className="px-2 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-300";
+    }
+    remaining--;
+    setTimeout(tick,1000);
+}
 tick();
 </script></body></html>
 """
