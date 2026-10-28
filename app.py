@@ -163,18 +163,33 @@ async function verify(){let b=document.getElementById('btn'),s=document.getEleme
 init();
 </script></body></html>"""
 
-CONTENT_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبتي</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] min-h-screen p-4"><div class="max-w-3xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-xl font-bold text-white">📁 مكتبتك - __UID__</h1><span id="time" class="bg-[#1e1e35] px-3 py-1 rounded-full text-xs text-white"></span></div><div id="list" class="space-y-3"></div></div>
+CONTENT_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبتي</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] min-h-screen p-4"><div class="max-w-3xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-xl font-bold text-white">📁 مكتبتك - __UID__</h1><span id="time" class="bg-[#1e1e35] px-3 py-1 rounded-full text-xs text-white">جاري التحميل...</span></div><div id="list" class="space-y-3"><div class="text-center text-gray-400 mt-10">⏳ جاري تحميل ملفاتك...</div></div><div id="debug" class="mt-6 text-[11px] text-gray-600 break-all"></div></div>
 <script>
 const UID="__UID__";
 async function load(){
-  let c=await fetch('/check?user_id='+UID).then(r=>r.json());
-  document.getElementById('time').innerText=c.hours||'';
-  if(c.status!=='active'){
-    document.getElementById('list').innerHTML='<div class="bg-[#1e1e35] p-6 rounded-[24px] text-center"><p class="text-white">'+(c.message||'انتهى وقتك')+'</p><a href="/pay/'+UID+'" class="mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-bold">💳 ادفع للتجديد</a></div>';
-    return;
+  try{
+    let res = await fetch('/check?user_id='+UID);
+    let c = await res.json();
+    document.getElementById('time').innerText=c.hours||'--';
+    document.getElementById('debug').innerText = JSON.stringify(c).slice(0,500);
+    let list = document.getElementById('list');
+    if(c.status!=='active'){
+      list.innerHTML='<div class="bg-[#1e1e35] p-6 rounded-[24px] text-center"><p class="text-white text-sm">'+(c.message||'انتهى وقتك - '+c.hours)+'</p><a href="/pay/'+UID+'" class="mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-bold">💳 ادفع للتجديد</a><a href="/view/'+UID+'" class="mt-3 inline-block w-full bg-white/10 text-white py-3 rounded-xl font-bold">رجوع</a></div>';
+      return;
+    }
+    if(!c.files || c.files.length===0){
+      list.innerHTML='<div class="bg-yellow-900/20 p-4 rounded-xl text-yellow-200 text-center">لا توجد ملفات في FILES</div>';
+      return;
+    }
+    let h="";
+    c.files.forEach(function(f){
+      h+='<div class="bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center"><div><p class="font-bold text-white">'+f+'</p><p class="text-[11px] text-gray-500">جاهز للتحميل</p></div><a href="/download/'+f+'?user_id='+UID+'" class="bg-white text-black px-5 py-2.5 rounded-xl text-sm font-black">تحميل</a></div>';
+    });
+    list.innerHTML=h;
+  }catch(e){
+    document.getElementById('list').innerHTML='<div class="bg-red-900/30 p-4 rounded-xl text-red-300 text-center">خطأ: '+e.message+'<br><br><button onclick="location.reload()" class="bg-white text-black px-4 py-2 rounded-xl">تحديث</button></div>';
+    document.getElementById('debug').innerText = e.toString();
   }
-  let h="";c.files.forEach(f=>{h+='<div class="bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center"><p class="font-bold text-white">'+f+'</p><button onclick="location.href=\'/download/'+f+'?user_id='+UID+'\'" class="bg-white text-black px-4 py-2 rounded-xl text-sm font-bold">تحميل</button></div>';});
-  document.getElementById('list').innerHTML=h;
 }
 load();
 </script></body></html>"""
