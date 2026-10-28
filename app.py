@@ -125,20 +125,77 @@ async function loadMsgs(){
  r.forEach(m=>{if(m.sender==='user') h+=`<div class="bg-white text-black p-3 rounded-2xl ml-10 rounded-br-sm">${m.message}</div>`; else h+=`<div class="bg-[#1e1e35] p-3 rounded-2xl mr-10 rounded-bl-sm border border-white/10">${m.message}</div>`;});
  box.innerHTML=h; box.scrollTop=box.scrollHeight;}catch(e){}
 }
-async function sendMsg(){
- let inp=document.getElementById('chatInput'); let txt=inp.value.trim(); if(!txt) return;
- await fetch('/api/support/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:SUPPORT_UID,message:txt,sender:'user'})});
- inp.value=''; loadMsgs();
+HOME_HTML = """
+<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PREMIUM GATE</title><script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');*{font-family:'Tajawal',sans-serif}
+.glass{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1)}
+.glow{box-shadow:0 0 40px rgba(139,92,246,0.3)}
+</style></head>
+<body class="bg-[#050507] text-white min-h-screen">
+<div class="fixed inset-0 -z-10"><div class="absolute top-0 right-0 w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px]"></div><div class="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[120px]"></div></div>
+<div class="max-w-6xl mx-auto p-4 flex justify-between items-center"><div class="flex items-center gap-2"><div class="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-black font-black">P</div><span class="font-black">PREMIUM GATE</span></div><div class="text-xs text-gray-500">0x2d44...8400 • SECURE</div></div>
+<div class="max-w-6xl mx-auto px-4 mt-10 grid lg:grid-cols-2 gap-8 items-center">
+<div>
+<div class="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs text-emerald-300 mb-4"><span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> النظام شغال - دخول فوري</div>
+<h1 class="text-4xl lg:text-5xl font-black leading-[1.2]">دخولك للمحتوى<br><span class="bg-gradient-to-r from-violet-400 to-emerald-400 bg-clip-text text-transparent">في ثانية واحدة</span></h1>
+<p class="text-gray-400 mt-4 text-sm">رابط واحد ينشألك حساب، يعطيك ساعتين مجانا.</p>
+<div class="mt-8 flex flex-col gap-3">
+<button onclick="checkAndGo()" class="w-full bg-white text-black py-4 rounded-2xl font-black text-center text-lg glow hover:scale-[1.02] transition">🚀 إنشاء حساب ودخول فوري</button>
+<div id="limitMsg" class="hidden bg-yellow-900/30 border border-yellow-500/30 rounded-xl p-3 text-center text-sm text-yellow-200"></div>
+<div class="flex gap-2 mt-2"><input id="uidInput" placeholder="عندك ID ؟ اكتبه هنا" class="flex-1 bg-[#12121f] border border-white/10 rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-violet-500"><button onclick="goUid()" class="bg-[#1e1e35] border border-white/10 px-6 rounded-2xl font-bold">دخول</button></div>
+</div>
+<div class="grid grid-cols-3 gap-3 mt-8"><div class="glass rounded-2xl p-4 text-center"><p class="text-2xl font-black text-violet-400">2H</p><p class="text-[11px] text-gray-400">مجانا</p></div><div class="glass rounded-2xl p-4 text-center"><p class="text-2xl font-black text-emerald-400">1$</p><p class="text-[11px] text-gray-400">30 يوم</p></div><div class="glass rounded-2xl p-4 text-center"><p class="text-2xl font-black">∞</p><p class="text-[11px] text-gray-400">تحميل</p></div></div>
+</div>
+<div class="bg-[#12121f] rounded-[32px] p-2 border border-white/10 shadow-2xl"><div class="bg-black rounded-[24px] p-6"><div class="flex justify-between mb-6"><span class="text-xs text-gray-500">معاينة حسابك الحقيقي</span><span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span></div><div class="bg-[#12121f] rounded-[20px] p-5 border border-white/5"><div class="flex items-center justify-end gap-2 mb-3"><span>👤</span><span id="previewUid" class="font-bold">--</span></div><p class="text-sm text-right">متبقي: <span id="previewTimer" class="font-bold text-emerald-400">--:--:--</span> : متبقي</p><p class="text-sm text-right">حالة: <span id="previewStatus">active</span> : حالة</p><div class="grid grid-cols-2 gap-3 mt-6"><button onclick="openRealContent()" class="bg-[#8b5cf6] py-3 rounded-xl text-center font-bold text-sm">📁 محتوى</button><button onclick="openRealPay()" class="bg-[#10b981] py-3 rounded-xl text-center font-bold text-sm text-black">💳 دفع</button></div></div></div></div>
+</div>
+<div id="chatBtn" onclick="openChat()" class="fixed bottom-6 right-6 w-14 h-14 bg-white rounded-full flex items-center justify-center text-black shadow-2xl cursor-pointer z-50 glow"><i class="fa-solid fa-comments text-xl"></i></div>
+<div id="chatBox" class="fixed bottom-24 right-4 w-[360px] max-w-[90vw] bg-[#12121f] border border-white/10 rounded-[20px] shadow-2xl z-50 hidden flex-col overflow-hidden"><div class="bg-[#1e1e35] p-4 flex justify-between items-center"><div><p class="font-bold text-sm">💬 الدعم الفوري</p><p class="text-[11px] text-green-400">● متصل الآن</p></div><button onclick="closeChat()" class="text-gray-400">✕</button></div><div id="chatMsgs" class="flex-1 p-4 space-y-3 overflow-y-auto max-h-[320px] text-sm"><div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋</div></div><div class="p-3 bg-black/30 flex gap-2"><input id="chatInput" placeholder="اكتب رسالتك..." class="flex-1 bg-[#0a0a12] border border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none"><button onclick="sendMsg()" class="bg-white text-black px-4 rounded-xl font-bold text-sm">ارسال</button></div></div>
+<script>
+let SUPPORT_UID = localStorage.getItem('support_uid') || "guest_"+Math.floor(Math.random()*99999);
+localStorage.setItem('support_uid', SUPPORT_UID);
+function goUid(){let v=document.getElementById('uidInput').value.trim(); if(!v)return; location.href='/view/'+v;}
+function openChat(){document.getElementById('chatBox').classList.remove('hidden'); document.getElementById('chatBox').classList.add('flex'); loadMsgs();}
+function closeChat(){document.getElementById('chatBox').classList.add('hidden'); document.getElementById('chatBox').classList.remove('flex');}
+async function loadMsgs(){ try{let r=await fetch(`/api/support/get?user_id=${SUPPORT_UID}`).then(x=>x.json()); let box=document.getElementById('chatMsgs'); let h='<div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋</div>'; r.forEach(m=>{if(m.sender==='user') h+=`<div class="bg-white text-black p-3 rounded-2xl ml-10 rounded-br-sm">${m.message}</div>`; else h+=`<div class="bg-[#1e1e35] p-3 rounded-2xl mr-10 rounded-bl-sm border border-white/10">${m.message}</div>`;}); box.innerHTML=h; box.scrollTop=box.scrollHeight;}catch(e){}}
+async function sendMsg(){ let inp=document.getElementById('chatInput'); let txt=inp.value.trim(); if(!txt) return; await fetch('/api/support/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:SUPPORT_UID,message:txt,sender:'user'})}); inp.value=''; loadMsgs(); }
+
+function openRealContent(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/content/'+id; else alert('ما عندكش حساب، دير انشاء اول'); }
+function openRealPay(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/pay/'+id; else alert('ما عندكش حساب، دير انشاء اول'); }
+
+async function loadPreview(){
+  let myId = localStorage.getItem('my_user_id');
+  let uidEl = document.getElementById('previewUid');
+  let timerEl = document.getElementById('previewTimer');
+  let statusEl = document.getElementById('previewStatus');
+  if(!myId){
+    uidEl.innerText = "ما عندكش حساب";
+    timerEl.innerText = "0:00:00";
+    return;
+  }
+  uidEl.innerText = myId;
+  try{
+    let c = await fetch(`/check?user_id=${myId}`).then(r=>r.json());
+    statusEl.innerText = c.status;
+    let rem = c.hours || "0:00:00";
+    timerEl.innerText = rem;
+    // تحديث مباشر كل ثانية بدون ما يرجع 2:00
+    let parts = rem.split(':');
+    let sec = 0;
+    if(parts.length===3){ sec = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]); }
+    setInterval(()=>{
+      if(sec<=0) return;
+      sec--;
+      let h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+      timerEl.innerText = h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
+    },1000);
+  }catch(e){
+    timerEl.innerText = "خطأ";
+  }
 }
-document.getElementById('chatInput')?.addEventListener('keydown',e=>{if(e.key==='Enter') sendMsg();});
-let pt=7200;
-setInterval(()=>{
-  if(pt<=0) return;
-  pt--;
-  let h=Math.floor(pt/3600), m=Math.floor((pt%3600)/60), s=pt%60;
-  let el=document.getElementById('previewTimer');
-  if(el) el.innerText=h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
-},1000);
+loadPreview();
+
 async function getFingerprint(){
   let s = navigator.userAgent + '|' + screen.width + 'x' + screen.height + '|' + Intl.DateTimeFormat().resolvedOptions().timeZone + '|' + navigator.language;
   let hash = 0; for(let i=0;i<s.length;i++){ hash = ((hash<<5)-hash)+s.charCodeAt(i); hash|=0; }
@@ -152,11 +209,7 @@ async function checkAndGo(){
   if(savedId && lastTime){
     let diff = (Date.now() - parseInt(lastTime)) / (1000*60*60);
     if(diff < 24){
-      let remain = 24 - diff; let h=Math.floor(remain);
-      let el=document.getElementById('limitMsg');
-      el.innerHTML = `عندك حساب <b>${savedId}</b> درته اليوم<br>تقدر تدير جديد بعد ${h} ساعة<br><a href='/view/${savedId}' class='underline text-white font-bold'>ارجع لحسابك</a>`;
-      el.classList.remove('hidden');
-      setTimeout(()=>{ location.href='/view/'+savedId; }, 1500);
+      location.href='/view/'+savedId;
       return;
     }
   }
