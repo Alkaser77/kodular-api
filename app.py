@@ -150,13 +150,12 @@ async function getFingerprint(){
 async function checkAndGo(){
   let fp = await getFingerprint();
   localStorage.setItem('my_fp', fp);
-  let savedId = localStorage.getItem('my_user_id');
-  let lastTime = localStorage.getItem('last_go_time');
-  if(savedId && lastTime){
-    let diff = (Date.now() - parseInt(lastTime)) / (1000*60*60);
-    if(diff < 24){ location.href='/view/'+savedId; return; }
-  }
-  location.href='/go?fp='+fp;
+  // مسحنا شرط savedId - توا يخلي السيرفر هو اللي يقرر
+  localStorage.removeItem('my_user_id');
+  localStorage.removeItem('last_go_time');
+  document.cookie = "last_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+  document.cookie = "device_fp=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+  location.href='/go?fp='+encodeURIComponent(fp);
 }
 </script></body></html>
 """
@@ -381,6 +380,14 @@ def go():
     if fp: resp.set_cookie('device_fp', fp, max_age=86400*30, samesite='Lax')
     resp.set_cookie('last_user_id', uid, max_age=86400, samesite='Lax')
     return resp
+    
+@app.route('/clear')
+def clear():
+    resp = make_response("<script>localStorage.clear(); alert('تم المسح - اضغط انشاء حساب من جديد'); window.location='/';</script>")
+    resp.set_cookie('device_fp', '', expires=0)
+    resp.set_cookie('last_user_id', '', expires=0)
+    return resp
+
 
 @app.route('/view/<user_id>')
 def view_user(user_id):
