@@ -160,10 +160,41 @@ async function checkAndGo(){
 </script></body></html>
 """
 
-PAY_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>دفع</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md"><div class="bg-[#1e1e35] rounded-[24px] p-6 border border-white/10"><h1 class="text-xl font-bold text-white text-center">الدفع الآمن - BSC</h1><div class="bg-black/40 rounded-2xl p-4 mt-4"><div id="amt" class="text-3xl font-bold text-emerald-400 text-center">-- USDT</div></div><div class="bg-black/40 rounded-2xl p-4 mt-4"><p class="text-xs text-gray-400">عنوان المحفظة</p><div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all text-white mt-2">__WALLET__</div></div><button onclick="verify()" id="btn" class="w-full bg-emerald-500 text-black py-4 rounded-xl font-bold mt-4">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div>
+PAY_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>دفع</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md"><div class="bg-[#1e1e35] rounded-[24px] p-6 border border-white/10"><h1 class="text-xl font-bold text-white text-center">الدفع الآمن - BSC</h1>
+
+<div class="bg-black/40 rounded-2xl p-4 mt-4">
+<div class="flex justify-between items-center gap-2">
+<div id="amt" class="text-2xl font-bold text-emerald-400">-- USDT</div>
+<button onclick="copyAmt()" class="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">📋 نسخ المبلغ</button>
+</div>
+</div>
+
+<div class="bg-black/40 rounded-2xl p-4 mt-4"><p class="text-xs text-gray-400">عنوان المحفظة</p>
+<div class="flex gap-2 items-center mt-2">
+<div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all text-white flex-1">__WALLET__</div>
+<button onclick="copyWallet()" class="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">📋 نسخ المحفظة</button>
+</div>
+</div>
+
+<button onclick="verify()" id="btn" class="w-full bg-emerald-500 text-black py-4 rounded-xl font-bold mt-4">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div>
 <script>
 let UID="__UID__";
-async function init(){let r=await fetch('/amount/'+UID).then(x=>x.json());document.getElementById('amt').innerText=r.amount+' USDT';document.getElementById('toContent').href='/content/'+UID;}
+let currentAmount="";
+let currentWallet="__WALLET__";
+async function init(){
+  let r=await fetch('/amount/'+UID).then(x=>x.json());
+  currentAmount=r.amount;
+  document.getElementById('amt').innerText=r.amount+' USDT';
+  document.getElementById('toContent').href='/content/'+UID;
+}
+function copyAmt(){
+  navigator.clipboard.writeText(currentAmount);
+  let b=event.target; let t=b.innerText; b.innerText='✅ تم'; setTimeout(()=>b.innerText=t,1500);
+}
+function copyWallet(){
+  navigator.clipboard.writeText(currentWallet);
+  let b=event.target; let t=b.innerText; b.innerText='✅ تم'; setTimeout(()=>b.innerText=t,1500);
+}
 async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="جاري التحقق...";b.disabled=true;try{let r=await fetch('/verify/'+UID).then(x=>x.json());if(r.paid){s.innerHTML="تم التفعيل";setTimeout(()=>location.href='/content/'+UID,1500);}else{s.innerHTML='لم يتم العثور';b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
 init();
 </script></body></html>"""
