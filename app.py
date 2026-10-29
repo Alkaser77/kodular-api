@@ -177,7 +177,7 @@ async function load(){
 load();
 </script></body></html>"""
 
-ADMIN_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Promax V2</title><script src="https://cdn.tailwindcss.com"></script>
+ADMIN_HTML = '''<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Promax V2</title><script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head><body class="bg-[#050507] text-white min-h-screen p-3"><div class="max-w-7xl mx-auto">
 <div class="flex justify-between items-center mb-4"><h1 class="text-xl font-black">👑 PROMAX V2 - لوحة كاملة</h1><div class="flex gap-2 items-center"><input id="search" placeholder="بحث user_id" class="bg-[#12121f] border border-white/10 rounded-xl px-3 py-1.5 text-xs w-32"><span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-full">متصل</span></div></div>
@@ -332,7 +332,7 @@ function tick(){
 }
 tick();
 </script></body></html>
-"""
+'''
     return html.replace("__USERID__", user_id).replace("__REM__", rem_initial).replace("__STATUS__", status).replace("__SEC__", str(remaining_sec))
 
 @app.route('/')
