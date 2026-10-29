@@ -154,11 +154,11 @@ PAY_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta n
 <script>
 let UID="__UID__";
 async function init(){let r=await fetch('/amount/'+UID).then(x=>x.json());document.getElementById('amt').innerText=r.amount+' USDT';document.getElementById('toContent').href='/content/'+UID;}
-async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="⏳ جاري التحقق...";b.disabled=true;try{let r=await fetch('/verify/'+UID).then(x=>x.json());if(r.paid){s.innerHTML="✅ تم التفعيل";setTimeout(()=>location.href='/content/'+UID,1500);}else{s.innerHTML='❌ لم يتم العثور';b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
+async function verify(){let b=document.getElementById('btn'),s=document.getElementById('status');b.innerHTML="جاري التحقق...";b.disabled=true;try{let r=await fetch('/verify/'+UID).then(x=>x.json());if(r.paid){s.innerHTML="تم التفعيل";setTimeout(()=>location.href='/content/'+UID,1500);}else{s.innerHTML='لم يتم العثور';b.disabled=false;b.innerHTML="لقد دفعت، فعل حسابي";}}catch(e){s.innerText="خطأ";b.disabled=false;}}
 init();
 </script></body></html>"""
 
-CONTENT_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبتي</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] min-h-screen p-4"><div class="max-w-3xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-xl font-bold text-white">📁 مكتبتك - __UID__</h1><span id="time" class="bg-[#1e1e35] px-4 py-2 rounded-full text-sm font-bold text-emerald-400">--:--:--</span></div><div id="list" class="space-y-3"></div><div class="mt-8 flex gap-3"><a href="/view/__UID__" class="flex-1 bg-white/10 border border-white/10 py-3 rounded-xl text-center text-white font-bold">👤 حسابي</a><a href="/" class="flex-1 bg-white text-black py-3 rounded-xl text-center font-black">🏠 الرئيسية</a></div></div>
+CONTENT_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبتي</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#080810] min-h-screen p-4"><div class="max-w-3xl mx-auto"><div class="flex justify-between items-center mb-6"><h1 class="text-xl font-bold text-white">مكتبتي - __UID__</h1><span id="time" class="bg-[#1e1e35] px-4 py-2 rounded-full text-sm font-bold text-emerald-400">--:--:--</span></div><div id="list" class="space-y-3"></div><div class="mt-8 flex gap-3"><a href="/view/__UID__" class="flex-1 bg-white/10 border border-white/10 py-3 rounded-xl text-center text-white font-bold">حسابي</a><a href="/" class="flex-1 bg-white text-black py-3 rounded-xl text-center font-black">الرئيسية</a></div></div>
 <script>
 const UID="__UID__";
 let remainingSec = 0;
@@ -170,7 +170,7 @@ async function load(){
     let parts = (c.hours||"0:00:00").split(':'); if(parts.length===3) remainingSec = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]); else if(parts.length===2) remainingSec = parseInt(parts[0])*60 + parseInt(parts[1]); else remainingSec = 0;
     tick();
     let list = document.getElementById('list');
-    if(c.status!=='active'){ list.innerHTML='<div class="bg-[#1e1e35] p-6 rounded-[24px] text-center"><p class="text-white font-bold">⏰ '+ (c.message||'انتهى وقتك') +'</p><a href="/pay/'+UID+'" class="mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-black">💳 ادفع للتجديد</a></div>'; return; }
+    if(c.status!=='active'){ list.innerHTML='<div class="bg-[#1e1e35] p-6 rounded-[24px] text-center"><p class="text-white font-bold">انتهى وقتك - '+ (c.message||'انتهى وقتك') +'</p><a href="/pay/'+UID+'" class="mt-6 inline-block w-full bg-emerald-500 text-black py-3 rounded-xl font-black">ادفع للتجديد</a></div>'; return; }
     let h=""; c.files.forEach(function(f){ h+='<div class="bg-[#12121f] border border-white/5 rounded-2xl p-4 flex justify-between items-center hover:border-violet-500/30 transition"><p class="font-bold text-white text-[15px]">'+f+'</p><a href="/download/'+f+'?user_id='+UID+'" class="bg-white text-black px-6 py-2.5 rounded-xl text-sm font-black hover:scale-105 transition">تحميل</a></div>'; }); list.innerHTML=h;
   }catch(e){ document.getElementById('list').innerHTML='<div class="bg-red-900/20 p-4 rounded-xl text-center text-red-300">خطأ في التحميل<br><button onclick="location.reload()" class="mt-3 bg-white text-black px-4 py-2 rounded-xl font-bold">تحديث</button></div>'; }
 }
@@ -180,25 +180,25 @@ load();
 ADMIN_HTML = '''<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Promax V2</title><script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head><body class="bg-[#050507] text-white min-h-screen p-3"><div class="max-w-7xl mx-auto">
-<div class="flex justify-between items-center mb-4"><h1 class="text-xl font-black">👑 PROMAX V2 - لوحة كاملة</h1><div class="flex gap-2 items-center"><input id="search" placeholder="بحث user_id" class="bg-[#12121f] border border-white/10 rounded-xl px-3 py-1.5 text-xs w-32"><span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-full">متصل</span></div></div>
+<div class="flex justify-between items-center mb-4"><h1 class="text-xl font-black">PROMAX V2 - لوحة كاملة</h1><div class="flex gap-2 items-center"><input id="search" placeholder="بحث user_id" class="bg-[#12121f] border border-white/10 rounded-xl px-3 py-1.5 text-xs w-32"><span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-full">متصل</span></div></div>
 <div class="grid grid-cols-4 gap-2 mb-4">
 <div class="bg-[#12121f] p-3 rounded-xl border border-white/5"><p class="text-[11px] text-gray-400">الكل</p><p id="totalUsers" class="text-xl font-black">--</p></div>
-<div class="bg-[#12121f] p-3 rounded-xl border border-white/5"><p class="text-[11px] text-gray-400">نشط ✅</p><p id="activeUsers" class="text-xl font-black text-emerald-400">--</p></div>
-<div class="bg-[#12121f] p-3 rounded-xl border border-white/5"><p class="text-[11px] text-gray-400">منتهي ❌</p><p id="expiredUsers" class="text-xl font-black text-red-400">--</p></div>
+<div class="bg-[#12121f] p-3 rounded-xl border border-white/5"><p class="text-[11px] text-gray-400">نشط</p><p id="activeUsers" class="text-xl font-black text-emerald-400">--</p></div>
+<div class="bg-[#12121f] p-3 rounded-xl border border-white/5"><p class="text-[11px] text-gray-400">منتهي</p><p id="expiredUsers" class="text-xl font-black text-red-400">--</p></div>
 <div class="bg-[#12121f] p-3 rounded-xl border border-white/5"><p class="text-[11px] text-gray-400">أجهزة</p><p id="deviceCount" class="text-xl font-black text-yellow-400">--</p></div>
 </div>
 <div class="flex gap-2 mb-4 text-xs">
-<button onclick="showTab('users')" id="tab-users" class="bg-white text-black px-4 py-2 rounded-xl font-bold">👥 المستخدمين</button>
-<button onclick="showTab('support')" id="tab-support" class="bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl">💬 الدعم</button>
-<button onclick="showTab('devices')" id="tab-devices" class="bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl">📱 الأجهزة</button>
+<button onclick="showTab('users')" id="tab-users" class="bg-white text-black px-4 py-2 rounded-xl font-bold">المستخدمين</button>
+<button onclick="showTab('support')" id="tab-support" class="bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl">الدعم <span id="supportBadge" class="hidden bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full"></span></button>
+<button onclick="showTab('devices')" id="tab-devices" class="bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl">الأجهزة</button>
 </div>
 <div id="view-users" class="bg-[#12121f] rounded-2xl border border-white/5 overflow-hidden"><div class="p-3 border-b border-white/5 flex justify-between items-center gap-2"><h2 class="font-bold text-sm">المستخدمين</h2><div class="flex gap-2"><input id="customDays" type="number" placeholder="أيام" class="w-16 bg-black border border-white/10 rounded-lg px-2 py-1 text-xs"><input id="customHours" type="number" placeholder="ساعات" class="w-16 bg-black border border-white/10 rounded-lg px-2 py-1 text-xs"><span class="text-[10px] text-gray-500 py-1">لتحديد المدة</span></div><button onclick="loadUsers()" class="text-[11px] bg-white text-black px-3 py-1 rounded-lg font-bold">تحديث</button></div><div id="tb" class="divide-y divide-white/5 max-h-[75vh] overflow-y-auto text-sm"></div></div>
-<div id="view-support" class="hidden bg-[#12121f] rounded-2xl border border-white/5 p-3"><div id="supportList" class="space-y-2 max-h-[70vh] overflow-y-auto"></div></div>
+<div id="view-support" class="hidden bg-[#12121f] rounded-2xl border border-white/5 p-3"><div id="convList" class="flex gap-2 overflow-x-auto mb-3"></div><div id="supportList" class="space-y-2 max-h-[70vh] overflow-y-auto"></div></div>
 <div id="view-devices" class="hidden bg-[#12121f] rounded-2xl border border-white/5 p-3"><div id="deviceList" class="space-y-2 max-h-[70vh] overflow-y-auto"></div><button onclick="clearDevices()" class="mt-3 w-full bg-red-500/20 text-red-300 py-2 rounded-xl text-xs">مسح كل الأجهزة</button></div>
 </div>
 <script>
 const KEY=new URLSearchParams(location.search).get("key");
-let allUsers=[];
+let allUsers=[]; let allSupport=[]; let currentFilter='all';
 function showTab(t){
  document.getElementById('view-users').classList.add('hidden');document.getElementById('view-support').classList.add('hidden');document.getElementById('view-devices').classList.add('hidden');
  document.getElementById('tab-users').className='bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl';document.getElementById('tab-support').className='bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl';document.getElementById('tab-devices').className='bg-[#12121f] border border-white/10 px-4 py-2 rounded-xl';
@@ -217,9 +217,9 @@ function renderUsers(list){
  let s=document.getElementById('search').value.trim(); if(s) list=list.filter(x=>x.user_id.includes(s));
  let h="";
  list.forEach(function(x){
-  let statusBadge = x.is_active ? '<span class="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">● فعال</span>' : '<span class="bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full text-[10px]">● منتهي/معطل</span>';
+  let statusBadge = x.is_active ? '<span class="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">فعال</span>' : '<span class="bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full text-[10px]">منتهي/معطل</span>';
   let timeColor = x.is_active ? 'text-emerald-400' : 'text-red-400';
-  h+='<div class="p-3 hover:bg-white/5 border-b border-white/5 last:border-0"><div class="flex justify-between items-start gap-2"><div class="flex-1"><div class="flex items-center gap-2"><p class="font-bold text-[13px]">'+x.user_id+'</p>'+statusBadge+'</div><p class="text-[11px] text-gray-500 mt-1">'+x.ip_address+'</p><p class="text-[12px] mt-1">متبقي: <span class="font-black '+timeColor+'">'+x.remaining_formatted+'</span> • الحالة: '+x.raw_status+'</p><p class="text-[10px] text-gray-600 mt-1">ينتهي: '+x.expire_at+'</p></div><div class="flex flex-col gap-1 text-[11px] min-w-[140px]"><div class="flex gap-1"><button onclick="actionUser(\\''+x.user_id+'\\',\\'extend_custom\\')" class="flex-1 bg-violet-500 text-white px-2 py-1.5 rounded-lg font-bold">+ مخصص</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'add_days\\',30)" class="bg-emerald-500 text-black px-2 py-1.5 rounded-lg font-bold">+30 يوم</button></div><div class="flex gap-1"><button onclick="actionUser(\\''+x.user_id+'\\',\\'add_days\\',1)" class="flex-1 bg-[#1e1e35] px-2 py-1.5 rounded-lg">+1 يوم</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'add_days\\',-1)" class="flex-1 bg-yellow-500/20 text-yellow-300 px-2 py-1.5 rounded-lg">-1 يوم</button></div><div class="flex gap-1"><button onclick="actionUser(\\''+x.user_id+'\\',\\'enable\\')" class="flex-1 bg-white/10 px-2 py-1.5 rounded-lg">تفعيل</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'disable\\')" class="flex-1 bg-yellow-500/10 text-yellow-300 px-2 py-1.5 rounded-lg">تعطيل</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'delete\\')" class="bg-red-500/20 text-red-300 px-2 py-1.5 rounded-lg">حذف</button></div><a href="/view/'+x.user_id+'" target="_blank" class="text-center bg-white text-black py-1 rounded-lg font-bold text-[10px] mt-1">فتح صفحته 👁️</a></div></div></div>';
+  h+='<div class="p-3 hover:bg-white/5 border-b border-white/5 last:border-0"><div class="flex justify-between items-start gap-2"><div class="flex-1"><div class="flex items-center gap-2"><p class="font-bold text-[13px]">'+x.user_id+'</p>'+statusBadge+'</div><p class="text-[11px] text-gray-500 mt-1">'+x.ip_address+'</p><p class="text-[12px] mt-1">متبقي: <span class="font-black '+timeColor+'">'+x.remaining_formatted+'</span> - الحالة: '+x.raw_status+'</p><p class="text-[10px] text-gray-600 mt-1">ينتهي: '+x.expire_at+'</p></div><div class="flex flex-col gap-1 text-[11px] min-w-[140px]"><div class="flex gap-1"><button onclick="actionUser(\\''+x.user_id+'\\',\\'extend_custom\\')" class="flex-1 bg-violet-500 text-white px-2 py-1.5 rounded-lg font-bold">+ مخصص</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'add_days\\',30)" class="bg-emerald-500 text-black px-2 py-1.5 rounded-lg font-bold">+30 يوم</button></div><div class="flex gap-1"><button onclick="actionUser(\\''+x.user_id+'\\',\\'add_days\\',1)" class="flex-1 bg-[#1e1e35] px-2 py-1.5 rounded-lg">+1 يوم</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'add_days\\',-1)" class="flex-1 bg-yellow-500/20 text-yellow-300 px-2 py-1.5 rounded-lg">-1 يوم</button></div><div class="flex gap-1"><button onclick="actionUser(\\''+x.user_id+'\\',\\'enable\\')" class="flex-1 bg-white/10 px-2 py-1.5 rounded-lg">تفعيل</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'disable\\')" class="flex-1 bg-yellow-500/10 text-yellow-300 px-2 py-1.5 rounded-lg">تعطيل</button><button onclick="actionUser(\\''+x.user_id+'\\',\\'delete\\')" class="bg-red-500/20 text-red-300 px-2 py-1.5 rounded-lg">حذف</button></div><a href="/view/'+x.user_id+'" target="_blank" class="text-center bg-white text-black py-1 rounded-lg font-bold text-[10px] mt-1">فتح صفحته</a></div></div></div>';
  });
  document.getElementById('tb').innerHTML=h||'<div class="p-6 text-center text-gray-500">لا يوجد</div>';
 }
@@ -236,32 +236,34 @@ async function actionUser(uid, act, val){
  let r=await fetch('/admin/action?key='+KEY, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id:uid, action:act, days:days, hours:hours})}).then(x=>x.json());
  alert(r.message||'تم'); loadUsers();
 }
+function filterChat(uid){ currentFilter=uid; renderSupportList(); }
+function renderSupportList(){
+  let filtered=currentFilter==='all'?allSupport:allSupport.filter(m=>m.user_id===currentFilter);
+  let h=""; filtered.forEach(function(m){ h+='<div class="bg-black/30 p-3 rounded-xl"><p class="text-[11px] text-gray-500">'+m.user_id+' - '+(m.created_at||'')+'</p><p class="text-sm mt-1">'+(m.message||'')+'</p><div class="flex gap-2 mt-2"><input id="reply-'+m.id+'" placeholder="رد..." class="flex-1 bg-[#0a0a12] border border-white/10 rounded-lg px-2 py-1 text-xs"><button onclick="replySupport(\\''+m.user_id+'\\','+m.id+')" class="bg-white text-black px-3 py-1 rounded-lg text-xs font-bold">رد</button></div></div>'; });
+  document.getElementById('supportList').innerHTML=h||'لا رسائل';
+  let groups={}; allSupport.forEach(m=>{ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); });
+  let convHtml='<button onclick="filterChat(\\'all\\')" class="'+(currentFilter==='all'?'bg-white text-black':'bg-white/10')+' px-3 py-2 rounded-xl text-xs">الكل</button>';
+  Object.keys(groups).forEach(function(uid){ convHtml+='<button onclick="filterChat(\\''+uid+'\\')" class="'+(currentFilter===uid?'bg-white text-black':'bg-white/10')+' px-3 py-2 rounded-xl text-xs">'+uid+'</button>'; });
+  document.getElementById('convList').innerHTML=convHtml;
+}
 async function loadSupport(){
- document.getElementById('supportList').innerHTML='جاري...';
  let data=await fetch('/admin/support?key='+KEY).then(r=>r.json());
- let h=""; data.forEach(function(m){ h+='<div class="bg-black/30 p-3 rounded-xl"><p class="text-[11px] text-gray-500">'+m.user_id+' • '+(m.created_at||'')+'</p><p class="text-sm mt-1">'+(m.message||'')+'</p><div class="flex gap-2 mt-2"><input id="reply-'+m.id+'" placeholder="رد..." class="flex-1 bg-[#0a0a12] border border-white/10 rounded-lg px-2 py-1 text-xs"><button onclick="replySupport(\\''+m.user_id+'\\','+m.id+')" class="bg-white text-black px-3 py-1 rounded-lg text-xs font-bold">رد</button></div></div>'; });
- document.getElementById('supportList').innerHTML=h||'لا رسائل';
+ allSupport=data; renderSupportList();
 }
 async function replySupport(uid, id){ let txt=document.getElementById('reply-'+id).value.trim(); if(!txt) return; await fetch('/api/support/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid, message:txt, sender:'admin'})}); alert('تم الرد'); loadSupport(); }
-async function loadDevices(){ let d=await fetch('/admin/devices?key='+KEY).then(r=>r.json()); document.getElementById('deviceCount').innerText=d.length; let h=""; d.forEach(function(x){ h+='<div class="flex justify-between items-center bg-black/20 p-2 rounded-xl"><div><p class="text-xs font-bold">'+x.fingerprint+'</p><p class="text-[11px] text-gray-500">'+x.user_id+' • '+(x.ip_address||'')+'</p></div><button onclick="delDevice(\\''+x.fingerprint+'\\')" class="bg-red-500/20 text-red-300 px-2 py-1 rounded-lg text-[11px]">حذف</button></div>'; }); document.getElementById('deviceList').innerHTML=h||'فارغ'; }
+async function loadDevices(){ let d=await fetch('/admin/devices?key='+KEY).then(r=>r.json()); document.getElementById('deviceCount').innerText=d.length; let h=""; d.forEach(function(x){ h+='<div class="flex justify-between items-center bg-black/20 p-2 rounded-xl"><div><p class="text-xs font-bold">'+x.fingerprint+'</p><p class="text-[11px] text-gray-500">'+x.user_id+' - '+(x.ip_address||'')+'</p></div><button onclick="delDevice(\\''+x.fingerprint+'\\')" class="bg-red-500/20 text-red-300 px-2 py-1 rounded-lg text-[11px]">حذف</button></div>'; }); document.getElementById('deviceList').innerHTML=h||'فارغ'; }
 async function delDevice(fp){ await fetch('/admin/devices/delete?key='+KEY, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({fingerprint:fp})}); loadDevices(); }
 async function clearDevices(){ if(!confirm('مسح كل الأجهزة؟')) return; await fetch('/admin/devices/clear?key='+KEY, {method:'POST'}); loadDevices(); }
-
-let supportInterval = null;
-let lastSupportCount = 0;
-
+let supportInterval=null; let lastSupportCount=0;
 function startLiveChat(){
   if(supportInterval) clearInterval(supportInterval);
-  supportInterval = setInterval(async ()=>{
+  supportInterval=setInterval(async ()=>{
     if(document.getElementById('view-support').classList.contains('hidden')) return;
     try{
-      let data = await fetch('/admin/support?key='+KEY).then(r=>r.json());
-      if(data.length !== lastSupportCount){
-        allSupport = data;
-        lastSupportCount = data.length;
-        renderSupportList();
-        let groups={};
-        data.forEach(m=>{ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); });
+      let data=await fetch('/admin/support?key='+KEY).then(r=>r.json());
+      if(data.length!==lastSupportCount){
+        allSupport=data; lastSupportCount=data.length; renderSupportList();
+        let groups={}; data.forEach(m=>{ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); });
         let convs=Object.keys(groups).map(uid=>{
           let msgs=groups[uid].sort((a,b)=> new Date(a.created_at)-new Date(b.created_at));
           let last=msgs[msgs.length-1];
@@ -272,32 +274,23 @@ function startLiveChat(){
         let totalUnread=convs.reduce((s,c)=>s+c.unread,0);
         let badge=document.getElementById('supportBadge');
         if(totalUnread>0){ badge.innerText=totalUnread; badge.classList.remove('hidden'); badge.classList.add('flex'); } else { badge.classList.add('hidden'); }
-        let convHtml="";
-        convs.forEach(c=>{
-          let notif = c.unread>0 ? `<span class="bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center font-black animate-pulse">${c.unread}</span>` : '';
-          let active = currentFilter===c.uid ? 'bg-white text-black' : 'bg-black/30 border border-white/10';
-          convHtml+=`<button onclick="filterChat('${c.uid}')" class="${active} px-3 py-2 rounded-xl text-xs flex items-center gap-2 whitespace-nowrap"><span class="font-bold">${c.uid}</span>${notif}<span class="text-[10px] opacity-60">${c.count}</span></button>`;
-        });
-        document.getElementById('convList').innerHTML=convHtml;
       }
     }catch(e){}
   }, 3000);
 }
-
-const originalShowTab = showTab;
-showTab = function(t){
+const originalShowTab=showTab;
+showTab=function(t){
   originalShowTab(t);
   if(t==='support'){ lastSupportCount=0; startLiveChat(); loadSupport(); }
   else { if(supportInterval) clearInterval(supportInterval); }
 }
-
 loadUsers();
 startLiveChat();
 </script></body></html>
+'''
 
 def render_view(user_id, remaining_sec, rem_initial, status):
-    html = """
-<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__USERID__</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-black min-h-screen p-4"><div class="max-w-md mx-auto mt-10 bg-[#12121f] rounded-[24px] p-6 border border-white/10"><div class="text-right"><p class="text-white">متبقي: <span id="countdown" class="font-black text-emerald-400 text-lg">__REM__</span></p><p class="text-white mt-2 text-sm">حالة: <span id="statusBadge" class="px-2 py-1 rounded-full text-xs">__STATUS__</span></p><p id="expiredMsg" class="hidden mt-3 bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-center text-sm text-red-300">"⏰" انتهى وقتك - ادفع للتجديد</p></div><div class="grid grid-cols-2 gap-3 mt-8"><a href="/content/__USERID__" class="bg-[#8b5cf6] text-white py-3.5 rounded-xl text-center font-bold">"📁" محتوى</a><a href="/pay/__USERID__" class="bg-[#10b981] text-black py-3.5 rounded-xl text-center font-bold">"💳" دفع</a></div></div>
+    html = '''<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__USERID__</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-black min-h-screen p-4"><div class="max-w-md mx-auto mt-10 bg-[#12121f] rounded-[24px] p-6 border border-white/10"><div class="text-right"><p class="text-white">متبقي: <span id="countdown" class="font-black text-emerald-400 text-lg">__REM__</span></p><p class="text-white mt-2 text-sm">حالة: <span id="statusBadge" class="px-2 py-1 rounded-full text-xs">__STATUS__</span></p><p id="expiredMsg" class="hidden mt-3 bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-center text-sm text-red-300">انتهى وقتك - ادفع للتجديد</p></div><div class="grid grid-cols-2 gap-3 mt-8"><a href="/content/__USERID__" class="bg-[#8b5cf6] text-white py-3.5 rounded-xl text-center font-bold">محتوى</a><a href="/pay/__USERID__" class="bg-[#10b981] text-black py-3.5 rounded-xl text-center font-bold">دفع</a></div></div>
 <script>
 localStorage.setItem('my_user_id', '__USERID__');
 localStorage.setItem('last_go_time', Date.now().toString());
@@ -325,7 +318,7 @@ function tick(){
     }
     el.innerText=formatFull(remaining);
     if(badge.innerText.includes('active') || badge.innerText==='active'){
-        badge.innerText="● فعال"; badge.className="px-2 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-300";
+        badge.innerText="فعال"; badge.className="px-2 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-300";
     }
     remaining--;
     setTimeout(tick,1000);
@@ -333,7 +326,6 @@ function tick(){
 tick();
 </script></body></html>
 '''
-        html = VIEW_HTML
     html = html.replace("__USERID__", user_id)
     html = html.replace("__REM__", rem_initial)
     html = html.replace("__STATUS__", status)
@@ -456,7 +448,7 @@ def download(filename):
     if not user_id: return "user_id missing", 400
     user = get_user(user_id)
     if not user: return redirect(f"/pay/{user_id}")
-    if user.get("status")=="inactive": return Response("🚫 معطل", 403)
+    if user.get("status")=="inactive": return Response("معطل", 403)
     if get_remaining_hours(user) <= 0: return redirect(f"/pay/{user_id}")
     if filename not in FILES: return "not allowed", 403
     if filename == "File.npvt":
@@ -468,7 +460,6 @@ def download(filename):
     with open(file_path, 'rb') as f: data = f.read()
     return Response(data, mimetype='application/octet-stream', headers={"Content-Disposition": f"attachment;filename={filename}"})
 
-# ===== ADMIN PROMAX =====
 @app.route("/admin")
 def admin():
     if request.args.get("key") not in ALLOWED_KEYS: return Response("401 - غير مصرح",401)
@@ -484,7 +475,6 @@ def a_users():
         raw_status=u.get("status","active")
         rem_hours = get_remaining_hours(u)
         is_active = raw_status!="inactive" and rem_hours>0
-        # هذا هو التنسيق الصحيح اللي طلبته: يوم + ساعات + دقايق
         formatted = format_hm(rem_hours) if raw_status!="inactive" else "معطل"
         out.append({
             "user_id":u["user_id"],
@@ -510,24 +500,20 @@ def admin_action():
         user = get_user(uid)
         if not user and act!="delete":
             return jsonify({"message":"اليوزر غير موجود"}),404
-        
         if act=="delete":
             supabase.table("users").delete().eq("user_id", uid).execute()
             return jsonify({"message":f"تم حذف {uid}"})
         elif act=="disable":
             supabase.table("users").update({"status":"inactive"}).eq("user_id", uid).execute()
-            return jsonify({"message":f"تم تعطيل {uid} ❌"})
+            return jsonify({"message":f"تم تعطيل {uid}"})
         elif act=="enable":
             supabase.table("users").update({"status":"active"}).eq("user_id", uid).execute()
-            return jsonify({"message":f"تم تفعيل {uid} ✅"})
+            return jsonify({"message":f"تم تفعيل {uid}"})
         elif act=="extend_custom" or act=="add_days":
-            # لو المستخدم منتهي، نبدأ من الآن، لو فعال نضيف على وقته الحالي
             current_exp = parse_expire(user.get("expires_at")) if user else datetime.now()
             if not current_exp or current_exp < datetime.now():
                 current_exp = datetime.now()
-            # زيادة او نقصان
             new_exp = current_exp + timedelta(days=int(days), hours=int(hours))
-            # ما نخليش التاريخ في الماضي اذا نقصنا كثير
             if new_exp < datetime.now():
                 new_exp = datetime.now() + timedelta(hours=1)
             supabase.table("users").update({
@@ -537,7 +523,7 @@ def admin_action():
             diff = new_exp - datetime.now()
             d = diff.days
             h = diff.seconds//3600
-            return jsonify({"message":f"تم التحديث ✅ متبقي الآن: {d} يوم و {h} ساعة"})
+            return jsonify({"message":f"تم التحديث متبقي الآن: {d} يوم و {h} ساعة"})
     except Exception as e:
         return jsonify({"message": f"خطأ: {str(e)}"}), 500
     return jsonify({"message":"unknown"})
