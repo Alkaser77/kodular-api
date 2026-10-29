@@ -406,41 +406,6 @@ def home(): return Response(HOME_HTML, mimetype='text/html')
 def go():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
     fp = request.args.get('fp','').strip() or request.cookies.get('device_fp','').strip()
-    
-    # 1. لو الجهاز موجود ومزال في 24 ساعة -> رده لحسابه القديم
-    if fp and fp.startswith('fp_'):
-        try:
-            res = supabase.table("device_limits").select("*").eq("fingerprint", fp).execute()
-            if res.data:
-                row = res.data[0]
-                created = parse_expire(row.get("created_at",""))
-                if created and (datetime.now() - created).total_seconds() / 3600 < 24:
-                    return redirect(f"/view/{row['user_id']}")
-        except:
-            pass
-
-    # 2. لو وصل هنا معناها يا الجهاز محذوف يا أول مرة -> أنشئ حساب جديد بساعتين
-    uid = 'user_' + ''.join(random.choices(string.digits, k=6))
-    exp = datetime.now() + timedelta(hours=2)
-    user = {"user_id": uid, "expires_at": exp.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "ip_address": ip}
-    save_user(user)
-    
-    if fp and fp.startswith('fp_'):
-        try: 
-            supabase.table("device_limits").upsert({"fingerprint": fp, "user_id": uid, "ip_address": ip, "created_at": datetime.now().isoformat()}, on_conflict="fingerprint").execute()
-        except:
-            try: supabase.table("device_limits").insert({"fingerprint": fp, "user_id": uid, "ip_address": ip}).execute()
-            except Exception as e: print("device insert fail", e)
-            
-    resp = redirect(f"/view/{uid}")
-    if fp: resp.set_cookie('device_fp', fp, max_age=86400*30, samesite='Lax')
-    resp.set_cookie('last_user_id', uid, max_age=86400, samesite='Lax')
-    return resp
-
-@app.route('/go')
-def go():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
-    fp = request.args.get('fp','').strip() or request.cookies.get('device_fp','').strip()
     want_new = request.args.get('new') == '1'  # جاي من زر انشاء حساب جديد
 
     # 1. شوف الجهاز موجود ولا لا
