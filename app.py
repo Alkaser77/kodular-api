@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response, redirect
+from flask import Flask, request, jsonify, Response, redirect, make_response
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 import os, requests, random, string
@@ -77,6 +77,8 @@ HOME_HTML = """
 <style>@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');*{font-family:'Tajawal',sans-serif}
 .glass{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1)}
 .glow{box-shadow:0 0 40px rgba(139,92,246,0.3)}
+@keyframes rainbowShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.expired-auto{background:linear-gradient(270deg,#f97316,#f59e0b,#22c55e,#3b82f6,#a855f7,#f97316);background-size:600% 600%;animation:rainbowShift 3s ease infinite;}
 </style></head>
 <body class="bg-[#050507] text-white min-h-screen">
 <div class="fixed inset-0 -z-10"><div class="absolute top-0 right-0 w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px]"></div><div class="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[120px]"></div></div>
@@ -172,8 +174,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
     let btn = document.getElementById('mainGoBtn');
     if(btn){
       btn.innerHTML = '⚠️ انتهت صلاحيتك - اضغط لإنشاء حساب جديد (ساعتين)';
-      btn.classList.remove('bg-white','text-black');
-      btn.classList.add('bg-orange-500','text-white');
+      btn.className = 'w-full py-4 rounded-2xl font-black text-center text-lg text-white expired-auto shadow-[0_0_25px_rgba(249,115,22,0.5)] hover:scale-[1.02] transition';
     }
     let msg = document.getElementById('limitMsg');
     if(msg){
@@ -186,21 +187,18 @@ window.addEventListener('DOMContentLoaded', ()=>{
 """
 
 PAY_HTML = """<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>دفع</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-[#0a0a12] min-h-screen flex items-center justify-center p-4"><div class="w-full max-w-md"><div class="bg-[#1e1e35] rounded-[24px] p-6 border border-white/10"><h1 class="text-xl font-bold text-white text-center">الدفع الآمن - BSC</h1>
-
 <div class="bg-black/40 rounded-2xl p-4 mt-4">
 <div class="flex justify-between items-center gap-2">
 <div id="amt" class="text-2xl font-bold text-emerald-400">-- USDT</div>
 <button onclick="copyAmt()" class="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">📋 نسخ المبلغ</button>
 </div>
 </div>
-
 <div class="bg-black/40 rounded-2xl p-4 mt-4"><p class="text-xs text-gray-400">عنوان المحفظة</p>
 <div class="flex gap-2 items-center mt-2">
 <div class="bg-[#0a0a12] p-3 rounded-xl font-mono text-[11px] break-all text-white flex-1">__WALLET__</div>
 <button onclick="copyWallet()" class="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">📋 نسخ المحفظة</button>
 </div>
 </div>
-
 <button onclick="verify()" id="btn" class="w-full bg-emerald-500 text-black py-4 rounded-xl font-bold mt-4">لقد دفعت، فعل حسابي</button><div id="status" class="mt-4 text-center text-sm text-white"></div><div class="text-center mt-3"><a id="toContent" class="text-xs text-gray-400 underline">عرض المحتوى</a></div></div></div>
 <script>
 let UID="__UID__";
@@ -356,16 +354,45 @@ startLiveChat();
 </script></body></html>
 '''
 
-def render_view(user_id, remaining_sec, rem_initial, status):
-    html = '''<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__USERID__</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-black min-h-screen p-4"><div class="max-w-md mx-auto mt-10 bg-[#12121f] rounded-[24px] p-6 border border-white/10"><div class="text-right"><p class="text-white">متبقي: <span id="countdown" class="font-black text-emerald-400 text-lg">__REM__</span></p><p class="text-white mt-2 text-sm">حالة: <span id="statusBadge" class="px-2 py-1 rounded-full text-xs">__STATUS__</span></p><p id="expiredMsg" class="hidden mt-3 bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-center text-sm text-red-300">انتهى وقتك - ادفع للتجديد</p></div><div class="grid grid-cols-2 gap-3 mt-8"><a href="/content/__USERID__" class="bg-[#8b5cf6] text-white py-3.5 rounded-xl text-center font-bold">محتوى</a><a href="/pay/__USERID__" class="bg-[#10b981] text-black py-3.5 rounded-xl text-center font-bold">دفع</a></div></div>
+def render_view(user_id, remaining_sec, rem_initial, status, just_activated=False):
+    # --- التعديل هنا: المربع البرتقالي / الأخضر ---
+    if just_activated:
+        banner_html = """
+        <div class="w-full bg-gradient-to-r from-emerald-500 to-green-600 rounded-[16px] p-4 text-center font-black text-white text-[16px] shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-[pop_0.6s_ease] mb-4">
+            ✅ تم تفعيل حسابك - صالح لمدة ساعتين
+        </div>
+        <style>@keyframes pop{0%{transform:scale(0.85)}100%{transform:scale(1)}}</style>
+        """
+    elif remaining_sec <= 0 or status != "active":
+        banner_html = """
+        <div class="w-full bg-gradient-to-r from-orange-500 to-orange-600 rounded-[16px] p-4 text-center font-black text-white text-[16px] mb-3">
+            ⚠️ انتهت صلاحيتك - اضغط لإنشاء حساب جديد (ساعتين)
+        </div>
+        <div class="w-full bg-[#1a1a2e] border border-yellow-500/20 rounded-[12px] p-3 text-center text-[13px] text-yellow-200/80 mb-4">
+            ⏰ فات 24 ساعة على جهازك، تقدر تنشأ حساب جديد توا يدوياً
+        </div>
+        """
+    else:
+        banner_html = ""  # لو فعال ما نظهرش برتقالي
+
+    html = f'''<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{user_id}</title><script src="https://cdn.tailwindcss.com"></script></head>
+    <body class="bg-[#0a0a1a] min-h-screen p-4"><div class="max-w-md mx-auto mt-2">
+    {banner_html}
+    <div class="bg-[#12121f] rounded-[24px] p-6 border border-white/10">
+    <div class="text-right"><p class="text-white">متبقي: <span id="countdown" class="font-black text-emerald-400 text-lg">{rem_initial}</span></p>
+    <p class="text-white mt-2 text-sm">حالة: <span id="statusBadge" class="px-2 py-1 rounded-full text-xs">{status}</span></p>
+    <p id="expiredMsg" class="hidden mt-3 bg-red-900/30 border border-red-500/30 rounded-xl p-3 text-center text-sm text-red-300">انتهى وقتك - ادفع للتجديد</p></div>
+    <div class="grid grid-cols-2 gap-3 mt-8"><a href="/content/{user_id}" class="bg-[#8b5cf6] text-white py-3.5 rounded-xl text-center font-bold">📁 محتوى</a><a href="/pay/{user_id}" class="bg-[#10b981] text-black py-3.5 rounded-xl text-center font-bold">💳 دفع</a></div></div>
+    <div class="mt-4 text-center"><a href="/?expired=1" class="text-xs text-gray-500 underline">إنشاء حساب جديد</a></div>
+    </div>
 <script>
-localStorage.setItem('my_user_id', '__USERID__');
+localStorage.setItem('my_user_id', '{user_id}');
 localStorage.setItem('last_go_time', Date.now().toString());
-let remaining = __SEC__;
+let remaining = {remaining_sec};
 let el = document.getElementById('countdown');
 let expMsg = document.getElementById('expiredMsg');
 let badge = document.getElementById('statusBadge');
-function formatFull(sec){
+function formatFull(sec){{
     if(sec<=0) return "0:00:00";
     let d=Math.floor(sec/86400);
     let h=Math.floor((sec%86400)/3600);
@@ -373,30 +400,26 @@ function formatFull(sec){
     let s=sec%60;
     if(d>0) return d+" يوم "+h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
     return h+":"+String(m).padStart(2,'0')+":"+String(s).padStart(2,'0');
-}
-function tick(){
-    if(remaining<=0){
+}}
+function tick(){{
+    if(remaining<=0){{
         el.innerText="0:00:00";
         el.className="font-black text-red-400 text-lg";
         expMsg.classList.remove('hidden');
         badge.innerText="منتهي";
         badge.className="px-2 py-1 rounded-full text-xs bg-red-500/20 text-red-300";
         return;
-    }
+    }}
     el.innerText=formatFull(remaining);
-    if(badge.innerText.includes('active') || badge.innerText==='active'){
+    if(badge.innerText.includes('active') || badge.innerText==='active'){{
         badge.innerText="فعال"; badge.className="px-2 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-300";
-    }
+    }}
     remaining--;
     setTimeout(tick,1000);
-}
+}}
 tick();
 </script></body></html>
 '''
-    html = html.replace("__USERID__", user_id)
-    html = html.replace("__REM__", rem_initial)
-    html = html.replace("__STATUS__", status)
-    html = html.replace("__SEC__", str(remaining_sec))
     return html
 
 @app.route('/')
@@ -406,9 +429,8 @@ def home(): return Response(HOME_HTML, mimetype='text/html')
 def go():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
     fp = request.args.get('fp','').strip() or request.cookies.get('device_fp','').strip()
-    want_new = request.args.get('new') == '1'  # جاي من زر انشاء حساب جديد
+    want_new = request.args.get('new') == '1'
 
-    # 1. شوف الجهاز موجود ولا لا
     if fp and fp.startswith('fp_'):
         try:
             res = supabase.table("device_limits").select("*").eq("fingerprint", fp).execute()
@@ -417,28 +439,21 @@ def go():
                 created = parse_expire(row.get("created_at",""))
                 if created:
                     hours = (datetime.now() - created).total_seconds() / 3600
-                    
                     if not want_new:
-                        # جاي تلقائي من الموقع
                         if hours < 24:
-                            # مازال في 24 ساعة -> رده لحسابه القديم
                             return redirect(f"/view/{row['user_id']}")
                         else:
-                            # فات 24 ساعة -> ما تنشأش تلقائي، رجعه للرئيسية باش ينشأ يدوي
                             resp = redirect("/?expired=1")
                             resp.set_cookie('device_fp', fp, max_age=86400*30, samesite='Lax')
                             return resp
                     else:
-                        # ضغط زر انشاء جديد يدوي
                         if hours < 24:
-                            return f"<h3 style='text-align:center'>ما تقدرش تنشأ حساب جديد إلا بعد 24 ساعة<br>مازال {24-hours:.1f} ساعة</h3><div style='text-align:center'><a href='/'>رجوع</a></div>"
+                            return f"<h3 style='text-align:center;margin-top:50px'>ما تقدرش تنشأ حساب جديد إلا بعد 24 ساعة<br>مازال {24-hours:.1f} ساعة</h3><div style='text-align:center'><a href='/'>رجوع</a></div>"
                         else:
-                            # فات 24 ساعة مسموح - احذف القديم وخليه ينشأ جديد تحت
                             supabase.table("device_limits").delete().eq("fingerprint", fp).execute()
         except Exception as e:
             print("check fail", e)
 
-    # 2. هنا يجي في حالتين بس: أول مرة / أو محذوف يدوي من الأدمن / أو فات 24 وضغط زر جديد
     uid = 'user_' + ''.join(random.choices(string.digits, k=6))
     exp = datetime.now() + timedelta(hours=2)
     user = {"user_id": uid, "expires_at": exp.strftime("%Y-%m-%d %H:%M:%S"), "status": "active", "ip_address": ip}
@@ -451,7 +466,7 @@ def go():
             try: supabase.table("device_limits").insert({"fingerprint": fp, "user_id": uid, "ip_address": ip}).execute()
             except Exception as e: print("device insert fail", e)
             
-    resp = redirect(f"/view/{uid}")
+    resp = redirect(f"/view/{uid}?just=1")
     if fp: resp.set_cookie('device_fp', fp, max_age=86400*30, samesite='Lax')
     resp.set_cookie('last_user_id', uid, max_age=86400, samesite='Lax')
     return resp
@@ -463,18 +478,19 @@ def clear():
     resp.set_cookie('last_user_id', '', expires=0)
     return resp
 
-
 @app.route('/view/<user_id>')
 def view_user(user_id):
+    just = request.args.get('just') == '1'
     u = get_user(user_id)
     if not u:
         exp = datetime.now() + timedelta(hours=2)
         u = {"user_id": user_id, "expires_at": exp.strftime("%Y-%m-%d %H:%M:%S"), "status": "active"}
         save_user(u)
+        just = True
     remaining_sec = get_remaining_seconds(u)
     rem_initial = format_hm(get_remaining_hours(u)) if u.get("status")!="inactive" else "معطل"
     status = u.get("status", "active")
-    return Response(render_view(user_id, remaining_sec, rem_initial, status), mimetype='text/html')
+    return Response(render_view(user_id, remaining_sec, rem_initial, status, just_activated=just), mimetype='text/html')
 
 @app.route('/pay/<user_id>')
 def pay_page(user_id): return Response(PAY_HTML.replace("__WALLET__", ROOT_WALLET).replace("__UID__", user_id), mimetype='text/html')
