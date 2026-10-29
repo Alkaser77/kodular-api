@@ -246,8 +246,54 @@ async function replySupport(uid, id){ let txt=document.getElementById('reply-'+i
 async function loadDevices(){ let d=await fetch('/admin/devices?key='+KEY).then(r=>r.json()); document.getElementById('deviceCount').innerText=d.length; let h=""; d.forEach(function(x){ h+='<div class="flex justify-between items-center bg-black/20 p-2 rounded-xl"><div><p class="text-xs font-bold">'+x.fingerprint+'</p><p class="text-[11px] text-gray-500">'+x.user_id+' • '+(x.ip_address||'')+'</p></div><button onclick="delDevice(\\''+x.fingerprint+'\\')" class="bg-red-500/20 text-red-300 px-2 py-1 rounded-lg text-[11px]">حذف</button></div>'; }); document.getElementById('deviceList').innerHTML=h||'فارغ'; }
 async function delDevice(fp){ await fetch('/admin/devices/delete?key='+KEY, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({fingerprint:fp})}); loadDevices(); }
 async function clearDevices(){ if(!confirm('مسح كل الأجهزة؟')) return; await fetch('/admin/devices/clear?key='+KEY, {method:'POST'}); loadDevices(); }
+
+let supportInterval = null;
+let lastSupportCount = 0;
+
+function startLiveChat(){
+  if(supportInterval) clearInterval(supportInterval);
+  supportInterval = setInterval(async ()=>{
+    if(document.getElementById('view-support').classList.contains('hidden')) return;
+    try{
+      let data = await fetch('/admin/support?key='+KEY).then(r=>r.json());
+      if(data.length !== lastSupportCount){
+        allSupport = data;
+        lastSupportCount = data.length;
+        renderSupportList();
+        let groups={};
+        data.forEach(m=>{ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); });
+        let convs=Object.keys(groups).map(uid=>{
+          let msgs=groups[uid].sort((a,b)=> new Date(a.created_at)-new Date(b.created_at));
+          let last=msgs[msgs.length-1];
+          let unread=msgs.filter(x=>x.sender==='user').length;
+          if(last && last.sender==='admin') unread=0;
+          return {uid, last, count:groups[uid].length, unread};
+        }).sort((a,b)=> new Date(b.last.created_at)-new Date(a.last.created_at));
+        let totalUnread=convs.reduce((s,c)=>s+c.unread,0);
+        let badge=document.getElementById('supportBadge');
+        if(totalUnread>0){ badge.innerText=totalUnread; badge.classList.remove('hidden'); badge.classList.add('flex'); } else { badge.classList.add('hidden'); }
+        let convHtml="";
+        convs.forEach(c=>{
+          let notif = c.unread>0 ? `<span class="bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center font-black animate-pulse">${c.unread}</span>` : '';
+          let active = currentFilter===c.uid ? 'bg-white text-black' : 'bg-black/30 border border-white/10';
+          convHtml+=`<button onclick="filterChat('${c.uid}')" class="${active} px-3 py-2 rounded-xl text-xs flex items-center gap-2 whitespace-nowrap"><span class="font-bold">${c.uid}</span>${notif}<span class="text-[10px] opacity-60">${c.count}</span></button>`;
+        });
+        document.getElementById('convList').innerHTML=convHtml;
+      }
+    }catch(e){}
+  }, 3000);
+}
+
+const originalShowTab = showTab;
+showTab = function(t){
+  originalShowTab(t);
+  if(t==='support'){ lastSupportCount=0; startLiveChat(); loadSupport(); }
+  else { if(supportInterval) clearInterval(supportInterval); }
+}
+
 loadUsers();
-</script></body></html>"""
+startLiveChat();
+</script></body></html>
 
 def render_view(user_id, remaining_sec, rem_initial, status):
     html = """
