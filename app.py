@@ -105,9 +105,20 @@ HOME_HTML = """
 <script>
 let SUPPORT_UID = localStorage.getItem('support_uid') || "guest_"+Math.floor(Math.random()*99999);
 localStorage.setItem('support_uid', SUPPORT_UID);
+let chatInterval = null;
 function goUid(){let v=document.getElementById('uidInput').value.trim(); if(!v){document.getElementById('uidInput').focus();return;} location.href='/view/'+v;}
-function openChat(){document.getElementById('chatBox').classList.remove('hidden'); document.getElementById('chatBox').classList.add('flex'); loadMsgs();}
-function closeChat(){document.getElementById('chatBox').classList.add('hidden'); document.getElementById('chatBox').classList.remove('flex');}
+function openChat(){
+  document.getElementById('chatBox').classList.remove('hidden'); 
+  document.getElementById('chatBox').classList.add('flex'); 
+  loadMsgs();
+  if(chatInterval) clearInterval(chatInterval);
+  chatInterval = setInterval(loadMsgs, 2000);
+}
+function closeChat(){
+  document.getElementById('chatBox').classList.add('hidden'); 
+  document.getElementById('chatBox').classList.remove('flex');
+  if(chatInterval) clearInterval(chatInterval);
+}
 async function loadMsgs(){ try{let r=await fetch('/api/support/get?user_id='+SUPPORT_UID).then(x=>x.json()); let box=document.getElementById('chatMsgs'); let h='<div class="bg-white/5 p-3 rounded-xl text-xs text-gray-300">مرحبا! 👋 انا الدعم، كيف نساعدك؟</div>'; r.forEach(m=>{if(m.sender==='user') h+='<div class="bg-white text-black p-3 rounded-2xl ml-10 rounded-br-sm">'+m.message+'</div>'; else h+='<div class="bg-[#1e1e35] p-3 rounded-2xl mr-10 rounded-bl-sm border border-white/10">'+m.message+'</div>';}); box.innerHTML=h; box.scrollTop=box.scrollHeight;}catch(e){}}
 async function sendMsg(){ let inp=document.getElementById('chatInput'); let txt=inp.value.trim(); if(!txt) return; await fetch('/api/support/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:SUPPORT_UID,message:txt,sender:'user'})}); inp.value=''; loadMsgs(); }
 function openRealContent(){ let id=localStorage.getItem('my_user_id'); if(id) location.href='/content/'+id; else alert('ما عندكش حساب، دير انشاء اول'); }
