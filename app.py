@@ -87,7 +87,7 @@ HOME_HTML = """
 <h1 class="text-4xl lg:text-5xl font-black leading-[1.2]">دخولك للمحتوى<br><span class="bg-gradient-to-r from-violet-400 to-emerald-400 bg-clip-text text-transparent">في ثانية واحدة</span></h1>
 <p class="text-gray-400 mt-4 text-sm">رابط واحد ينشألك حساب، يعطيك ساعتين مجانا، ويفتحلك صفحة العرض الاحترافية.</p>
 <div class="mt-8 flex flex-col gap-3">
-<button onclick="checkAndGo()" class="w-full bg-white text-black py-4 rounded-2xl font-black text-center text-lg glow hover:scale-[1.02] transition">🚀 إنشاء حساب ودخول فوري</button>
+<button id="mainGoBtn" onclick="checkAndGo()" class="w-full bg-white text-black py-4 rounded-2xl font-black text-center text-lg glow hover:scale-[1.02] transition">🚀 إنشاء حساب ودخول فوري</button>
 <div id="limitMsg" class="hidden bg-yellow-900/30 border border-yellow-500/30 rounded-xl p-3 text-center text-sm text-yellow-200"></div>
 <div class="flex gap-2 mt-2"><input id="uidInput" placeholder="عندك ID ؟ اكتبه هنا" class="flex-1 bg-[#12121f] border border-white/10 rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-violet-500"><button onclick="goUid()" class="bg-[#1e1e35] border border-white/10 px-6 rounded-2xl font-bold">دخول</button></div>
 </div>
@@ -147,16 +147,41 @@ async function getFingerprint(){
   let hash = 0; for(let i=0;i<s.length;i++){ hash = ((hash<<5)-hash)+s.charCodeAt(i); hash|=0; }
   return 'fp_'+Math.abs(hash);
 }
+
+const urlParams = new URLSearchParams(window.location.search);
+const isExpired = urlParams.get('expired') == '1';
+
 async function checkAndGo(){
   let fp = await getFingerprint();
   localStorage.setItem('my_fp', fp);
-  // مسحنا شرط savedId - توا يخلي السيرفر هو اللي يقرر
-  localStorage.removeItem('my_user_id');
-  localStorage.removeItem('last_go_time');
-  document.cookie = "last_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "device_fp=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  location.href='/go?fp='+encodeURIComponent(fp);
+  if(isExpired){
+    localStorage.removeItem('my_user_id');
+    document.cookie = "last_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    location.href='/go?new=1&fp='+encodeURIComponent(fp);
+  } else {
+    localStorage.removeItem('my_user_id');
+    localStorage.removeItem('last_go_time');
+    document.cookie = "last_user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "device_fp=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    location.href='/go?fp='+encodeURIComponent(fp);
+  }
 }
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  if(isExpired){
+    let btn = document.getElementById('mainGoBtn');
+    if(btn){
+      btn.innerHTML = '⚠️ انتهت صلاحيتك - اضغط لإنشاء حساب جديد (ساعتين)';
+      btn.classList.remove('bg-white','text-black');
+      btn.classList.add('bg-orange-500','text-white');
+    }
+    let msg = document.getElementById('limitMsg');
+    if(msg){
+      msg.classList.remove('hidden');
+      msg.innerHTML = '⏰ فات 24 ساعة على جهازك، تقدر تنشأ حساب جديد توا يدوياً';
+    }
+  }
+});
 </script></body></html>
 """
 
