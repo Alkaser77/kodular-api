@@ -258,31 +258,32 @@ let supportInterval=null; let lastSupportCount=0;
 function startLiveChat(){
   if(supportInterval) clearInterval(supportInterval);
   supportInterval=setInterval(async ()=>{
-    if(document.getElementById('view-support').classList.contains('hidden')) return;
     try{
       let data=await fetch('/admin/support?key='+KEY).then(r=>r.json());
       if(data.length!==lastSupportCount){
-        allSupport=data; lastSupportCount=data.length; renderSupportList();
-        let groups={}; data.forEach(m=>{ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); });
-        let convs=Object.keys(groups).map(uid=>{
-          let msgs=groups[uid].sort((a,b)=> new Date(a.created_at)-new Date(b.created_at));
+        allSupport=data; 
+        lastSupportCount=data.length;
+        if(!document.getElementById('view-support').classList.contains('hidden')){
+          renderSupportList();
+        }
+        let groups={}; 
+        data.forEach(function(m){ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); });
+        let totalUnread=0;
+        Object.keys(groups).forEach(function(uid){
+          let msgs=groups[uid].sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
           let last=msgs[msgs.length-1];
-          let unread=msgs.filter(x=>x.sender==='user').length;
-          if(last && last.sender==='admin') unread=0;
-          return {uid, last, count:groups[uid].length, unread};
-        }).sort((a,b)=> new Date(b.last.created_at)-new Date(a.last.created_at));
-        let totalUnread=convs.reduce((s,c)=>s+c.unread,0);
+          if(last && last.sender==='user'){ totalUnread++; }
+        });
         let badge=document.getElementById('supportBadge');
-        if(totalUnread>0){ badge.innerText=totalUnread; badge.classList.remove('hidden'); badge.classList.add('flex'); } else { badge.classList.add('hidden'); }
+        if(totalUnread>0){ badge.innerText=totalUnread; badge.classList.remove('hidden'); } else { badge.classList.add('hidden'); }
       }
     }catch(e){}
-  }, 3000);
+  }, 2000);
 }
 const originalShowTab=showTab;
 showTab=function(t){
   originalShowTab(t);
   if(t==='support'){ lastSupportCount=0; startLiveChat(); loadSupport(); }
-  else { if(supportInterval) clearInterval(supportInterval); }
 }
 loadUsers();
 startLiveChat();
