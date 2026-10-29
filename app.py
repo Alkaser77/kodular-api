@@ -333,7 +333,12 @@ function tick(){
 tick();
 </script></body></html>
 '''
-    return html.replace("__USERID__", user_id).replace("__REM__", rem_initial).replace("__STATUS__", status).replace("__SEC__", str(remaining_sec))
+        html = VIEW_HTML
+    html = html.replace("__USERID__", user_id)
+    html = html.replace("__REM__", rem_initial)
+    html = html.replace("__STATUS__", status)
+    html = html.replace("__SEC__", str(remaining_sec))
+    return html
 
 @app.route('/')
 def home(): return Response(HOME_HTML, mimetype='text/html')
