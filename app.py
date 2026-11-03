@@ -614,8 +614,40 @@ def admin_devices_clear():
 # ===== صفحة استخراج توكن المدار - بدون كمبيوتر =====
 @app.route('/admin/madar-token', methods=['GET', 'POST'])
 def madar_token_page():
-    import requests
+    import requests, socket
     
+    def resolve_via_google(domain):
+        try:
+            # نجيب الـ IP من Google DNS 8.8.8.8 بدل DNS متاع Render
+            r = requests.get(f"https://dns.google/resolve?name={domain}&type=A", timeout=10)
+            j = r.json()
+            if 'Answer' in j:
+                for ans in j['Answer']:
+                    if ans['type'] == 1: # A record
+                        return ans['data']
+            return None
+        except Exception as e:
+            return None
+
+    def post_with_ip(domain, path, json_data):
+        ip = resolve_via_google(domain)
+        if not ip:
+            return None, f"ما قدرتش نجيب IP لـ {domain}"
+        try:
+            # نطلب بالـ IP مباشرة ونحط Host في الهيدر
+            url = f"https://{ip}{path}"
+            headers = {
+                "Host": domain,
+                "User-Agent": "Almadar/2.5.0 Android",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            # SNI مشكلة، نطفي verify مؤقتا
+            r = requests.post(url, json=json_data, headers=headers, timeout=20, verify=False)
+            return r, None
+        except Exception as e:
+            return None, str(e)
+
     result_html = ""
     if request.method == 'POST':
         phone = request.form.get("phone","").strip()
@@ -623,77 +655,58 @@ def madar_token_page():
         
         logs = []
         token_found = None
-        api_used = ""
         
-        login_urls = [
-            "https://my.almadar.ly/api/v1/auth/login",
-            "https://my.almadar.ly/api/auth/login",
-            "https://my.almadar.ly/api/login",
-            "https://api.almadar.ly/api/login",
+        # جربنا الدومينات الرسمية
+        domains = [
+            ("my.almadar.ly", "/api/v1/auth/login"),
+            ("my.almadar.ly", "/api/auth/login"),
+            ("my.almadar.ly", "/api/login"),
+            ("api.almadar.ly", "/api/login"),
         ]
         
-        for url in login_urls:
-            try:
-                r = requests.post(url, json={"phone": phone, "password": password}, timeout=15, headers={
-                    "User-Agent":"Almadar/2.5.0",
-                    "Content-Type":"application/json"
-                })
-                logs.append(f"{url} => {r.status_code} {r.text[:300]}")
-                if r.status_code == 200:
-                    try:
-                        j = r.json()
-                        tok = j.get("token") or j.get("access_token") or j.get("data",{}).get("token")
-                        if tok:
-                            token_found = tok
-                            api_used = url
-                            break
-                    except: pass
-            except Exception as e:
-                logs.append(f"{url} ERROR {e}")
+        for domain, path in domains:
+            r, err = post_with_ip(domain, path, {"phone": phone, "password": password})
+            if err:
+                logs.append(f"{domain}{path} => ERROR: {err}")
+                continue
+            logs.append(f"{domain}{path} => {r.status_code} {r.text[:300]}")
+            if r.status_code == 200:
+                try:
+                    j = r.json()
+                    tok = j.get("token") or j.get("access_token") or j.get("data",{}).get("token") or j.get("data",{}).get("accessToken")
+                    if tok:
+                        token_found = tok
+                        break
+                except: pass
         
         if token_found:
             result_html = f"""
             <div style="background:#000;color:#0f0;padding:15px;border-radius:8px;word-break:break-all;margin-top:15px">
             ✅ تم بنجاح!<br><br>
-            <b>API:</b> {api_used}<br><br>
             <b>التوكن:</b><br>{token_found}<br><br>
             <button onclick="navigator.clipboard.writeText('{token_found}');alert('تم النسخ')" style="background:#22c55e;padding:10px;border:none;border-radius:5px;width:100%">نسخ التوكن</button>
-            <br><br>
-            <div style="color:#fff;background:#1e293b;padding:10px;border-radius:5px">حط هذا التوكن في Render في متغير اسمه MADAR_TOKEN</div>
             </div>
             """
         else:
             result_html = f"""
             <div style="background:#400;color:#fff;padding:15px;border-radius:8px;margin-top:15px">
-            ❌ فشل<br>
-            <pre style="white-space:pre-wrap;font-size:11px">{chr(10).join(logs)}</pre>
+            ❌ فشل - Render ما يقدرش يوصل لـ almadar.ly<br>
+            <pre style="white-space:pre-wrap;font-size:10px">{chr(10).join(logs)}</pre>
+            <br>
+            <b>الحل البديل:</b> استخدم تلفونك بس، شوف تحت
             </div>
             """
 
     return f"""
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>توكن المدار</title>
-<style>
-body{{font-family:system-ui;background:#0f172a;color:#fff;display:flex;justify-content:center;padding:20px;margin:0}}
+<style>body{{font-family:system-ui;background:#0f172a;color:#fff;display:flex;justify-content:center;padding:20px;margin:0}}
 .box{{background:#1e293b;padding:20px;border-radius:15px;width:100%;max-width:450px}}
 input{{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;background:#0f172a;color:#fff;box-sizing:border-box}}
-button{{width:100%;padding:12px;background:#22c55e;color:#000;font-weight:bold;border:none;border-radius:8px;cursor:pointer;margin-top:10px}}
-</style>
-</head>
-<body>
-<div class="box">
-<h2 style="text-align:center">🔑 استخراج توكن المدار</h2>
-<form method="POST">
-<input name="phone" placeholder="091xxxxxxx" required>
-<input name="password" type="password" placeholder="باسورد تطبيق المدار" required>
-<button type="submit">استخراج التوكن</button>
-</form>
-{result_html}
-</div>
-</body>
-</html>
+button{{width:100%;padding:12px;background:#22c55e;color:#000;font-weight:bold;border:none;border-radius:8px;cursor:pointer;margin-top:10px}}</style>
+</head><body><div class="box"><h2 style="text-align:center">🔑 استخراج توكن المدار 🔑</h2>
+<form method="POST"><input name="phone" placeholder="091xxxxxxx" required><input name="password" type="password" placeholder="باسورد تطبيق المدار" required><button type="submit">استخراج التوكن</button></form>{result_html}</div></body></html>
     """
 
 if __name__ == '__main__':
