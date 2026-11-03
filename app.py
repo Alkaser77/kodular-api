@@ -614,105 +614,87 @@ def admin_devices_clear():
 # ===== صفحة استخراج توكن المدار - بدون كمبيوتر =====
 @app.route('/admin/madar-token', methods=['GET', 'POST'])
 def madar_token_page():
-    html = """
+    import requests
+    
+    result_html = ""
+    if request.method == 'POST':
+        phone = request.form.get("phone","").strip()
+        password = request.form.get("password","").strip()
+        
+        logs = []
+        token_found = None
+        api_used = ""
+        
+        login_urls = [
+            "https://my.almadar.ly/api/v1/auth/login",
+            "https://my.almadar.ly/api/auth/login",
+            "https://my.almadar.ly/api/login",
+            "https://api.almadar.ly/api/login",
+        ]
+        
+        for url in login_urls:
+            try:
+                r = requests.post(url, json={"phone": phone, "password": password}, timeout=15, headers={
+                    "User-Agent":"Almadar/2.5.0",
+                    "Content-Type":"application/json"
+                })
+                logs.append(f"{url} => {r.status_code} {r.text[:300]}")
+                if r.status_code == 200:
+                    try:
+                        j = r.json()
+                        tok = j.get("token") or j.get("access_token") or j.get("data",{}).get("token")
+                        if tok:
+                            token_found = tok
+                            api_used = url
+                            break
+                    except: pass
+            except Exception as e:
+                logs.append(f"{url} ERROR {e}")
+        
+        if token_found:
+            result_html = f"""
+            <div style="background:#000;color:#0f0;padding:15px;border-radius:8px;word-break:break-all;margin-top:15px">
+            ✅ تم بنجاح!<br><br>
+            <b>API:</b> {api_used}<br><br>
+            <b>التوكن:</b><br>{token_found}<br><br>
+            <button onclick="navigator.clipboard.writeText('{token_found}');alert('تم النسخ')" style="background:#22c55e;padding:10px;border:none;border-radius:5px;width:100%">نسخ التوكن</button>
+            <br><br>
+            <div style="color:#fff;background:#1e293b;padding:10px;border-radius:5px">حط هذا التوكن في Render في متغير اسمه MADAR_TOKEN</div>
+            </div>
+            """
+        else:
+            result_html = f"""
+            <div style="background:#400;color:#fff;padding:15px;border-radius:8px;margin-top:15px">
+            ❌ فشل<br>
+            <pre style="white-space:pre-wrap;font-size:11px">{chr(10).join(logs)}</pre>
+            </div>
+            """
+
+    return f"""
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>استخراج توكن المدار</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>توكن المدار</title>
 <style>
-body{font-family:system-ui;background:#0f172a;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
-.box{background:#1e293b;padding:25px;border-radius:15px;width:90%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;background:#0f172a;color:#fff;box-sizing:border-box}
-button{width:100%;padding:12px;background:#22c55e;color:#000;font-weight:bold;border:none;border-radius:8px;cursor:pointer;margin-top:10px}
-pre{background:#000;color:#0f0;padding:12px;border-radius:8px;word-break:break-all;white-space:pre-wrap;font-size:12px;max-height:300px;overflow:auto;display:none}
-label{font-size:14px;color:#94a3b8}
+body{{font-family:system-ui;background:#0f172a;color:#fff;display:flex;justify-content:center;padding:20px;margin:0}}
+.box{{background:#1e293b;padding:20px;border-radius:15px;width:100%;max-width:450px}}
+input{{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;background:#0f172a;color:#fff;box-sizing:border-box}}
+button{{width:100%;padding:12px;background:#22c55e;color:#000;font-weight:bold;border:none;border-radius:8px;cursor:pointer;margin-top:10px}}
 </style>
 </head>
 <body>
 <div class="box">
 <h2 style="text-align:center">🔑 استخراج توكن المدار</h2>
-<label>رقم المدار (091...)</label>
-<input id="num" placeholder="091xxxxxxx">
-<label>باسورد تطبيق المدار</label>
-<input id="pass" type="password" placeholder="كلمة السر">
-<button onclick="getToken()">استخراج التوكن</button>
-<pre id="out"></pre>
-<button id="copyBtn" style="display:none;background:#3b82f6;color:#fff" onclick="copyToken()">نسخ التوكن</button>
-<div id="info" style="font-size:12px;color:#94a3b8;margin-top:10px;text-align:center">السيرفر هو اللي حيسجل دخول لحسابك ويطلع التوكن</div>
+<form method="POST">
+<input name="phone" placeholder="091xxxxxxx" required>
+<input name="password" type="password" placeholder="باسورد تطبيق المدار" required>
+<button type="submit">استخراج التوكن</button>
+</form>
+{result_html}
 </div>
-<script>
-async function getToken(){
-  const num=document.getElementById('num').value.trim();
-  const pass=document.getElementById('pass').value.trim();
-  const out=document.getElementById('out');
-  if(!num||!pass){alert('عبي الرقم والباسورد');return;}
-  out.style.display='block'; out.textContent='⏳ جاري تسجيل الدخول...\n';
-  try{
-    const r=await fetch('/admin/madar-token/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:num,password:pass})});
-    const data=await r.json();
-    if(data.token){
-      out.textContent='✅ تم بنجاح!\\n\\nالتوكن:\\n'+data.token+'\\n\\nAPI: '+data.api_used;
-      document.getElementById('copyBtn').style.display='block';
-      window._token=data.token;
-    }else{
-      out.textContent='❌ فشل:\\n'+JSON.stringify(data,null,2);
-    }
-  }catch(e){ out.textContent='❌ خطأ: '+e.message; }
-}
-function copyToken(){
-  navigator.clipboard.writeText(window._token);
-  alert('تم النسخ! حطه في Render في MADAR_TOKEN');
-}
-</script>
 </body>
 </html>
     """
-    return html
-
-@app.route('/admin/madar-token/api', methods=['POST'])
-def madar_token_api():
-    import requests
-    data = request.json
-    phone = data.get("phone","").strip()
-    password = data.get("password","").strip()
-    
-    login_urls = [
-        "https://my.almadar.ly/api/v1/auth/login",
-        "https://my.almadar.ly/api/auth/login",
-        "https://my.almadar.ly/api/v1/login",
-        "https://my.almadar.ly/api/login",
-        "https://api.almadar.ly/api/login",
-        "https://evoucher.almadar.ly/api/login",
-    ]
-    
-    logs = []
-    for url in login_urls:
-        try:
-            payloads = [
-                {"phone": phone, "password": password},
-                {"username": phone, "password": password},
-                {"mobile": phone, "password": password},
-                {"phone_number": phone, "password": password},
-            ]
-            for payload in payloads:
-                r = requests.post(url, json=payload, timeout=12, headers={
-                    "User-Agent":"Almadar/2.5.0 Android",
-                    "Content-Type":"application/json",
-                    "Accept":"application/json"
-                })
-                logs.append(f"{url} {payload.keys()} => {r.status_code} {r.text[:200]}")
-                if r.status_code == 200:
-                    try:
-                        j = r.json()
-                        token = j.get("token") or j.get("access_token") or j.get("data",{}).get("token") or j.get("data",{}).get("accessToken") or j.get("access_token")
-                        if token:
-                            return jsonify({"ok":True,"token":token,"api_used":url,"raw":j})
-                    except: pass
-        except Exception as e:
-            logs.append(f"{url} error {e}")
-    
-    return jsonify({"ok":False,"error":"ما قدرتش نجيب التوكن","logs":logs}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
