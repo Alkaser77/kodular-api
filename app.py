@@ -7,6 +7,56 @@ import os, requests, random, string, io, hashlib
 
 app = Flask(__name__)
 
+# ======== المفاتيح - نفسها في agent.py بالضبط ========
+ENCRYPT_KEY = b'X7pQ9vK2mN4bV8cZ1xL5aS3dF6gH9jK0lM2nB4vC7x='
+SECRET = "libya_secret_2026_9XkL2mQ7wE"
+VPS_TOKEN = "vps_libya_2026_8rT9yU2iO5p"
+VPS_HOST = "1.2.3.4"  # <-- غيرها لـ IP سيرفرك
+AGENT_URL = f"http://{VPS_HOST}:5001/api/agent"
+# =====================================================
+
+# ======== Supabase ========
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://YOUR_PROJECT.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "YOUR_SUPABASE_ANON_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# ===========================
+
+def make_ref(user_id, expire):
+    raw = f"{user_id}|{expire}|{SECRET}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:20]
+
+def agent_post(endpoint, payload, extra_headers=None):
+    headers = {
+        "Content-Type": "application/json",
+        "X-Agent-Token": VPS_TOKEN
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    try:
+        r = requests.post(f"{AGENT_URL}/{endpoint}", json=payload, headers=headers, timeout=20)
+        try:
+            return r.status_code, r.json()
+        except:
+            return r.status_code, {"error": "invalid json from agent", "raw": r.text}
+    except Exception as e:
+        return 500, {"error": "agent unreachable", "detail": str(e)}
+
+def time_left(expire_str):
+    try:
+        exp = datetime.fromisoformat(expire_str)
+        diff = exp - datetime.now()
+        if diff.total_seconds() <= 0:
+            return "0:00:00"
+        h = int(diff.total_seconds() // 3600)
+        m = int((diff.total_seconds() % 3600) // 60)
+        s = int(diff.total_seconds() % 60)
+        return f"{h}:{m:02d}:{s:02d}"
+    except:
+        return "0:00:00"
+
+def random_id(n=8):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=n))
+
 @app.errorhandler(Exception)
 def _handle_all_errors(e):
     from werkzeug.exceptions import HTTPException
