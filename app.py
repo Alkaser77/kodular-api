@@ -365,6 +365,7 @@ let supportInterval=null; let lastSupportCount=0;
 function startLiveChat(){ if(supportInterval) clearInterval(supportInterval); supportInterval=setInterval(async ()=>{ try{ let data=await fetch('/admin/support?key='+KEY).then(r=>r.json()); if(Array.isArray(data) && data.length!==lastSupportCount){ allSupport=data; lastSupportCount=data.length; if(!document.getElementById('view-support').classList.contains('hidden')){ renderSupportList(); } let groups={}; data.forEach(function(m){ if(!groups[m.user_id]) groups[m.user_id]=[]; groups[m.user_id].push(m); }); let totalUnread=0; Object.keys(groups).forEach(function(uid){ let msgs=groups[uid].sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); }); let last=msgs[msgs.length-1]; if(last && last.sender==='user'){ totalUnread++; }}); let badge=document.getElementById('supportBadge'); if(totalUnread>0){ badge.innerText=totalUnread; badge.classList.remove('hidden'); } else { badge.classList.add('hidden'); }}}catch(e){}}, 2000);}
 showKeyStatus(); loadMadar(); loadUsers(); loadPaid(); startLiveChat(); madarInterval=setInterval(loadMadar, 3000);
 </script></body></html>'''
+
 # ======== ROUTES - الرئيسية ========
 @app.route('/')
 def home(): return Response(HOME_HTML, mimetype='text/html')
