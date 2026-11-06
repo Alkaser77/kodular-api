@@ -6,15 +6,27 @@ import requests, random, string, json
 
 app = Flask(__name__)
 
-# ===== عدل هنا بس =====
-VPS_HOST = "YOUR_VPS_IP"
-VPS_TOKEN = "vps_libya_2026_8rT9yU2iO5p"
-SUPABASE_URL = "https://xxxx.supabase.co"
-SUPABASE_KEY = "حط-مفتاح-supabase-هنا"
-ADMIN_KEY = "123456"
-ROOT_WALLET = "0x2d447f9d656594f6c65de039aebe7da32a968400"
-PORT = 5000
-DOMAIN = "yourdomain.com"
+# ===== عدل هنا بس - يقرا من Render =====
+import os
+from supabase import create_client, Client
+
+VPS_HOST = os.getenv("VPS_HOST", "YOUR_VPS_IP")
+VPS_TOKEN = os.getenv("VPS_TOKEN", "vps_libya_2026_8rT9yU2iO5p")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+ADMIN_KEY = os.getenv("ADMIN_KEY", "123456")
+ROOT_WALLET = os.getenv("ROOT_WALLET", "0x2d447f9d656594f6c65de039aebe7da32a968400")
+DOMAIN = os.getenv("DOMAIN", "yourdomain.com")
+PORT = int(os.getenv("PORT", 5000))
+
+ALLOWED_KEYS = [ADMIN_KEY, "123456", "admin123"]
+
+# حماية - لو Supabase مش محطوط في Render، ما يطيحش السيرفر
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL.startswith("http") else None
+except Exception as e:
+    print("Supabase init failed:", e)
+    supabase = None
 # ======================
 
 AGENT_URL = f"http://{VPS_HOST}:5001/api/agent"
@@ -612,8 +624,4 @@ def admin_madar_reject():
     except Exception as e: return jsonify({"error":str(e)}),500
 
 if __name__ == '__main__':
-    print(f"=== PROMAX V2 - 4 PAGES ===")
-    print(f"Home: http://localhost:{PORT}/")
-    print(f"Admin: http://localhost:{PORT}/admin?key={ADMIN_KEY}")
-    print(f"VPS: {VPS_HOST}")
     app.run(host='0.0.0.0', port=PORT)
