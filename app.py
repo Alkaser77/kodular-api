@@ -10,13 +10,13 @@ app = Flask(__name__)
 import os
 from supabase import create_client, Client
 
-VPS_HOST = os.getenv("VPS_HOST", "YOUR_VPS_IP")
 VPS_TOKEN = os.getenv("VPS_TOKEN", "vps_libya_2026_8rT9yU2iO5p")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 ADMIN_KEY = os.getenv("ADMIN_KEY", "123456")
 ROOT_WALLET = os.getenv("ROOT_WALLET", "0x2d447f9d656594f6c65de039aebe7da32a968400")
-DOMAIN = os.getenv("DOMAIN", "yourdomain.com")
+VPS_HOST = os.getenv("VPS_HOST", "YOUR_VPS_IP")
+DOMAIN = os.getenv("DOMAIN", "").strip() or VPS_HOST  # لو فاضي في Render، يستعمل IP
 PORT = int(os.getenv("PORT", 5000))
 
 ALLOWED_KEYS = [ADMIN_KEY, "123456", "admin123"]
