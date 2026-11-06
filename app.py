@@ -1,5 +1,4 @@
-# app.py - النسخة الكاملة المعدلة - Supabase + VPS Agent + نظام أعمى
-# تشغيل: python3 app.py
+# app.py - يقرأ كل شي من Render Env
 from flask import Flask, request, jsonify, Response, redirect, make_response
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -7,19 +6,22 @@ import os, requests, random, string, io, hashlib
 
 app = Flask(__name__)
 
-# ======== المفاتيح - نفسها في agent.py بالضبط ========
-ENCRYPT_KEY = b'X7pQ9vK2mN4bV8cZ1xL5aS3dF6gH9jK0lM2nB4vC7xQ='
-SECRET = "libya_secret_2026_9XkL2mQ7wE"
-VPS_TOKEN = "vps_libya_2026_8rT9yU2iO5p"
-VPS_HOST = "1.2.3.4"
+# ======== يقرأ من Render - ما تكتب شي هنا ========
+ENCRYPT_KEY = os.environ.get("ENCRYPT_KEY", "").encode()
+SECRET = os.environ.get("SECRET", "")
+VPS_TOKEN = os.environ.get("VPS_TOKEN", "")
+VPS_HOST = os.environ.get("VPS_HOST", "")
 AGENT_URL = f"http://{VPS_HOST}:5001/api/agent"
-# =====================================================
+VPS_URL = AGENT_URL  # باش باقي الكود اللي يستعمل VPS_URL يخدم
 
-# ======== Supabase ========
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://YOUR_PROJECT.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "YOUR_SUPABASE_ANON_KEY")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-# ===========================
+
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "123456")
+ALLOWED_KEYS = [ADMIN_KEY, "123456", "admin123"]
+ROOT_WALLET = os.getenv("ROOT_WALLET", "0x2d447f9d656594f6c65de039aebe7da32a968400")
+# =====================================================
 
 def make_ref(user_id, expire):
     raw = f"{user_id}|{expire}|{SECRET}"
