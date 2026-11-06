@@ -11,7 +11,7 @@ app = Flask(__name__)
 ENCRYPT_KEY = b'X7pQ9vK2mN4bV8cZ1xL5aS3dF6gH9jK0lM2nB4vC7xQ='
 SECRET = "libya_secret_2026_9XkL2mQ7wE"
 VPS_TOKEN = "vps_libya_2026_8rT9yU2iO5p"
-VPS_HOST = "1.2.3.4"  # <-- غيرها لـ IP سيرفرك
+VPS_HOST = "1.2.3.4"
 AGENT_URL = f"http://{VPS_HOST}:5001/api/agent"
 # =====================================================
 
