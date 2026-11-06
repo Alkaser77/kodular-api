@@ -1,4 +1,4 @@
-# app.py - يقرأ كل شي من Render Env
+# app.py - يقرأ كل شي من Render Env - ما تكتب شي هنا
 from flask import Flask, request, jsonify, Response, redirect, make_response
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -6,23 +6,25 @@ import os, requests, random, string, io, hashlib
 
 app = Flask(__name__)
 
-# ======== يقرأ من Render - ما تكتب شي هنا ========
+# ======== Render Env - كل شي من هنا ========
 ENCRYPT_KEY = os.environ.get("ENCRYPT_KEY", "").encode()
 SECRET = os.environ.get("SECRET", "")
 VPS_TOKEN = os.environ.get("VPS_TOKEN", "")
 VPS_HOST = os.environ.get("VPS_HOST", "")
 AGENT_URL = f"http://{VPS_HOST}:5001/api/agent"
-VPS_URL = AGENT_URL  # باش باقي الكود اللي يستعمل VPS_URL يخدم
+VPS_URL = AGENT_URL  # باش الدوال اللي تستعمل VPS_URL تخدم
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "123456")
-ALLOWED_KEYS = [ADMIN_KEY, "123456", "admin123"]
+ALLOWED_KEYS = [ADMIN_KEY]
 ROOT_WALLET = os.getenv("ROOT_WALLET", "0x2d447f9d656594f6c65de039aebe7da32a968400")
-# =====================================================
-
+USDT = "0x55d398326f99059fF775485246999027B3196775"
+RPC = "https://bsc-dataseed.binance.org/"
+TOPIC = "[STRIPPED 66 bytes]"
+# =============================================
 def make_ref(user_id, expire):
     raw = f"{user_id}|{expire}|{SECRET}"
     return hashlib.sha256(raw.encode()).hexdigest()[:20]
